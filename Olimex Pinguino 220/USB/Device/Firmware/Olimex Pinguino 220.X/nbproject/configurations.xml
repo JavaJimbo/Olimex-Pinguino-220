@@ -37,9 +37,10 @@
         <itemPath>../../../../Microchip/USB/Generic Device Driver/usb_function_generic.c</itemPath>
         <itemPath>../../../../Microchip/USB/CDC Device Driver/usb_function_cdc.c</itemPath>
       </logicalFolder>
-      <itemPath>../main.c</itemPath>
       <itemPath>../usb_descriptors.c</itemPath>
       <itemPath>../DelayPIC32.c</itemPath>
+      <itemPath>../CRC Check.c</itemPath>
+      <itemPath>../main.c</itemPath>
     </logicalFolder>
     <logicalFolder name="ExternalFiles"
                    displayName="Important Files"
@@ -257,7 +258,6 @@
         <property key="UART2" value="true"/>
         <property key="USB" value="true"/>
         <property key="debugoptions.useswbreakpoints" value="false"/>
-        <property key="firmware.download.all" value="false"/>
         <property key="hwtoolclock.frcindebug" value="false"/>
         <property key="memories.aux" value="false"/>
         <property key="memories.bootflash" value="false"/>

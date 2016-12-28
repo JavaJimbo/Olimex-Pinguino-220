@@ -51,17 +51,17 @@ OBJECTDIR=build/${CND_CONF}/${IMAGE_TYPE}
 DISTDIR=dist/${CND_CONF}/${IMAGE_TYPE}
 
 # Source Files Quoted if spaced
-SOURCEFILES_QUOTED_IF_SPACED=../../../../Microchip/USB/usb_device.c "../../../../Microchip/USB/Generic Device Driver/usb_function_generic.c" "../../../../Microchip/USB/CDC Device Driver/usb_function_cdc.c" ../main.c ../usb_descriptors.c ../DelayPIC32.c
+SOURCEFILES_QUOTED_IF_SPACED=../../../../Microchip/USB/usb_device.c "../../../../Microchip/USB/Generic Device Driver/usb_function_generic.c" "../../../../Microchip/USB/CDC Device Driver/usb_function_cdc.c" ../usb_descriptors.c ../DelayPIC32.c "../CRC Check.c" ../main.c
 
 # Object Files Quoted if spaced
-OBJECTFILES_QUOTED_IF_SPACED=${OBJECTDIR}/_ext/926206843/usb_device.o ${OBJECTDIR}/_ext/2065199231/usb_function_generic.o ${OBJECTDIR}/_ext/1083301514/usb_function_cdc.o ${OBJECTDIR}/_ext/1472/main.o ${OBJECTDIR}/_ext/1472/usb_descriptors.o ${OBJECTDIR}/_ext/1472/DelayPIC32.o
-POSSIBLE_DEPFILES=${OBJECTDIR}/_ext/926206843/usb_device.o.d ${OBJECTDIR}/_ext/2065199231/usb_function_generic.o.d ${OBJECTDIR}/_ext/1083301514/usb_function_cdc.o.d ${OBJECTDIR}/_ext/1472/main.o.d ${OBJECTDIR}/_ext/1472/usb_descriptors.o.d ${OBJECTDIR}/_ext/1472/DelayPIC32.o.d
+OBJECTFILES_QUOTED_IF_SPACED=${OBJECTDIR}/_ext/926206843/usb_device.o ${OBJECTDIR}/_ext/2065199231/usb_function_generic.o ${OBJECTDIR}/_ext/1083301514/usb_function_cdc.o ${OBJECTDIR}/_ext/1472/usb_descriptors.o ${OBJECTDIR}/_ext/1472/DelayPIC32.o "${OBJECTDIR}/_ext/1472/CRC Check.o" ${OBJECTDIR}/_ext/1472/main.o
+POSSIBLE_DEPFILES=${OBJECTDIR}/_ext/926206843/usb_device.o.d ${OBJECTDIR}/_ext/2065199231/usb_function_generic.o.d ${OBJECTDIR}/_ext/1083301514/usb_function_cdc.o.d ${OBJECTDIR}/_ext/1472/usb_descriptors.o.d ${OBJECTDIR}/_ext/1472/DelayPIC32.o.d "${OBJECTDIR}/_ext/1472/CRC Check.o.d" ${OBJECTDIR}/_ext/1472/main.o.d
 
 # Object Files
-OBJECTFILES=${OBJECTDIR}/_ext/926206843/usb_device.o ${OBJECTDIR}/_ext/2065199231/usb_function_generic.o ${OBJECTDIR}/_ext/1083301514/usb_function_cdc.o ${OBJECTDIR}/_ext/1472/main.o ${OBJECTDIR}/_ext/1472/usb_descriptors.o ${OBJECTDIR}/_ext/1472/DelayPIC32.o
+OBJECTFILES=${OBJECTDIR}/_ext/926206843/usb_device.o ${OBJECTDIR}/_ext/2065199231/usb_function_generic.o ${OBJECTDIR}/_ext/1083301514/usb_function_cdc.o ${OBJECTDIR}/_ext/1472/usb_descriptors.o ${OBJECTDIR}/_ext/1472/DelayPIC32.o ${OBJECTDIR}/_ext/1472/CRC\ Check.o ${OBJECTDIR}/_ext/1472/main.o
 
 # Source Files
-SOURCEFILES=../../../../Microchip/USB/usb_device.c ../../../../Microchip/USB/Generic Device Driver/usb_function_generic.c ../../../../Microchip/USB/CDC Device Driver/usb_function_cdc.c ../main.c ../usb_descriptors.c ../DelayPIC32.c
+SOURCEFILES=../../../../Microchip/USB/usb_device.c ../../../../Microchip/USB/Generic Device Driver/usb_function_generic.c ../../../../Microchip/USB/CDC Device Driver/usb_function_cdc.c ../usb_descriptors.c ../DelayPIC32.c ../CRC Check.c ../main.c
 
 
 CFLAGS=
@@ -118,12 +118,6 @@ ${OBJECTDIR}/_ext/1083301514/usb_function_cdc.o: ../../../../Microchip/USB/CDC\ 
 	@${RM} ${OBJECTDIR}/_ext/1083301514/usb_function_cdc.o 
 	@${FIXDEPS} "${OBJECTDIR}/_ext/1083301514/usb_function_cdc.o.d" $(SILENT) -rsi ${MP_CC_DIR}../  -c ${MP_CC}  $(MP_EXTRA_CC_PRE) -g -D__DEBUG -D__MPLAB_DEBUGGER_ICD3=1 -fframe-base-loclist  -x c -c -mprocessor=$(MP_PROCESSOR_OPTION)  -Os -DPIC32MX795F512L_PIM -I".." -I"../../../../Microchip/Include" -I"../../../../Microchip/Include/USB" -I"../../../../Microchip/USB" -I"." -MMD -MF "${OBJECTDIR}/_ext/1083301514/usb_function_cdc.o.d" -o ${OBJECTDIR}/_ext/1083301514/usb_function_cdc.o "../../../../Microchip/USB/CDC Device Driver/usb_function_cdc.c"    -DXPRJ_default=$(CND_CONF)    $(COMPARISON_BUILD) 
 	
-${OBJECTDIR}/_ext/1472/main.o: ../main.c  nbproject/Makefile-${CND_CONF}.mk
-	@${MKDIR} "${OBJECTDIR}/_ext/1472" 
-	@${RM} ${OBJECTDIR}/_ext/1472/main.o.d 
-	@${RM} ${OBJECTDIR}/_ext/1472/main.o 
-	@${FIXDEPS} "${OBJECTDIR}/_ext/1472/main.o.d" $(SILENT) -rsi ${MP_CC_DIR}../  -c ${MP_CC}  $(MP_EXTRA_CC_PRE) -g -D__DEBUG -D__MPLAB_DEBUGGER_ICD3=1 -fframe-base-loclist  -x c -c -mprocessor=$(MP_PROCESSOR_OPTION)  -Os -DPIC32MX795F512L_PIM -I".." -I"../../../../Microchip/Include" -I"../../../../Microchip/Include/USB" -I"../../../../Microchip/USB" -I"." -MMD -MF "${OBJECTDIR}/_ext/1472/main.o.d" -o ${OBJECTDIR}/_ext/1472/main.o ../main.c    -DXPRJ_default=$(CND_CONF)    $(COMPARISON_BUILD) 
-	
 ${OBJECTDIR}/_ext/1472/usb_descriptors.o: ../usb_descriptors.c  nbproject/Makefile-${CND_CONF}.mk
 	@${MKDIR} "${OBJECTDIR}/_ext/1472" 
 	@${RM} ${OBJECTDIR}/_ext/1472/usb_descriptors.o.d 
@@ -135,6 +129,18 @@ ${OBJECTDIR}/_ext/1472/DelayPIC32.o: ../DelayPIC32.c  nbproject/Makefile-${CND_C
 	@${RM} ${OBJECTDIR}/_ext/1472/DelayPIC32.o.d 
 	@${RM} ${OBJECTDIR}/_ext/1472/DelayPIC32.o 
 	@${FIXDEPS} "${OBJECTDIR}/_ext/1472/DelayPIC32.o.d" $(SILENT) -rsi ${MP_CC_DIR}../  -c ${MP_CC}  $(MP_EXTRA_CC_PRE) -g -D__DEBUG -D__MPLAB_DEBUGGER_ICD3=1 -fframe-base-loclist  -x c -c -mprocessor=$(MP_PROCESSOR_OPTION)  -Os -DPIC32MX795F512L_PIM -I".." -I"../../../../Microchip/Include" -I"../../../../Microchip/Include/USB" -I"../../../../Microchip/USB" -I"." -MMD -MF "${OBJECTDIR}/_ext/1472/DelayPIC32.o.d" -o ${OBJECTDIR}/_ext/1472/DelayPIC32.o ../DelayPIC32.c    -DXPRJ_default=$(CND_CONF)    $(COMPARISON_BUILD) 
+	
+${OBJECTDIR}/_ext/1472/CRC\ Check.o: ../CRC\ Check.c  nbproject/Makefile-${CND_CONF}.mk
+	@${MKDIR} "${OBJECTDIR}/_ext/1472" 
+	@${RM} "${OBJECTDIR}/_ext/1472/CRC Check.o".d 
+	@${RM} "${OBJECTDIR}/_ext/1472/CRC Check.o" 
+	@${FIXDEPS} "${OBJECTDIR}/_ext/1472/CRC Check.o.d" $(SILENT) -rsi ${MP_CC_DIR}../  -c ${MP_CC}  $(MP_EXTRA_CC_PRE) -g -D__DEBUG -D__MPLAB_DEBUGGER_ICD3=1 -fframe-base-loclist  -x c -c -mprocessor=$(MP_PROCESSOR_OPTION)  -Os -DPIC32MX795F512L_PIM -I".." -I"../../../../Microchip/Include" -I"../../../../Microchip/Include/USB" -I"../../../../Microchip/USB" -I"." -MMD -MF "${OBJECTDIR}/_ext/1472/CRC Check.o.d" -o "${OBJECTDIR}/_ext/1472/CRC Check.o" "../CRC Check.c"    -DXPRJ_default=$(CND_CONF)    $(COMPARISON_BUILD) 
+	
+${OBJECTDIR}/_ext/1472/main.o: ../main.c  nbproject/Makefile-${CND_CONF}.mk
+	@${MKDIR} "${OBJECTDIR}/_ext/1472" 
+	@${RM} ${OBJECTDIR}/_ext/1472/main.o.d 
+	@${RM} ${OBJECTDIR}/_ext/1472/main.o 
+	@${FIXDEPS} "${OBJECTDIR}/_ext/1472/main.o.d" $(SILENT) -rsi ${MP_CC_DIR}../  -c ${MP_CC}  $(MP_EXTRA_CC_PRE) -g -D__DEBUG -D__MPLAB_DEBUGGER_ICD3=1 -fframe-base-loclist  -x c -c -mprocessor=$(MP_PROCESSOR_OPTION)  -Os -DPIC32MX795F512L_PIM -I".." -I"../../../../Microchip/Include" -I"../../../../Microchip/Include/USB" -I"../../../../Microchip/USB" -I"." -MMD -MF "${OBJECTDIR}/_ext/1472/main.o.d" -o ${OBJECTDIR}/_ext/1472/main.o ../main.c    -DXPRJ_default=$(CND_CONF)    $(COMPARISON_BUILD) 
 	
 else
 ${OBJECTDIR}/_ext/926206843/usb_device.o: ../../../../Microchip/USB/usb_device.c  nbproject/Makefile-${CND_CONF}.mk
@@ -155,12 +161,6 @@ ${OBJECTDIR}/_ext/1083301514/usb_function_cdc.o: ../../../../Microchip/USB/CDC\ 
 	@${RM} ${OBJECTDIR}/_ext/1083301514/usb_function_cdc.o 
 	@${FIXDEPS} "${OBJECTDIR}/_ext/1083301514/usb_function_cdc.o.d" $(SILENT) -rsi ${MP_CC_DIR}../  -c ${MP_CC}  $(MP_EXTRA_CC_PRE)  -g -x c -c -mprocessor=$(MP_PROCESSOR_OPTION)  -Os -DPIC32MX795F512L_PIM -I".." -I"../../../../Microchip/Include" -I"../../../../Microchip/Include/USB" -I"../../../../Microchip/USB" -I"." -MMD -MF "${OBJECTDIR}/_ext/1083301514/usb_function_cdc.o.d" -o ${OBJECTDIR}/_ext/1083301514/usb_function_cdc.o "../../../../Microchip/USB/CDC Device Driver/usb_function_cdc.c"    -DXPRJ_default=$(CND_CONF)    $(COMPARISON_BUILD) 
 	
-${OBJECTDIR}/_ext/1472/main.o: ../main.c  nbproject/Makefile-${CND_CONF}.mk
-	@${MKDIR} "${OBJECTDIR}/_ext/1472" 
-	@${RM} ${OBJECTDIR}/_ext/1472/main.o.d 
-	@${RM} ${OBJECTDIR}/_ext/1472/main.o 
-	@${FIXDEPS} "${OBJECTDIR}/_ext/1472/main.o.d" $(SILENT) -rsi ${MP_CC_DIR}../  -c ${MP_CC}  $(MP_EXTRA_CC_PRE)  -g -x c -c -mprocessor=$(MP_PROCESSOR_OPTION)  -Os -DPIC32MX795F512L_PIM -I".." -I"../../../../Microchip/Include" -I"../../../../Microchip/Include/USB" -I"../../../../Microchip/USB" -I"." -MMD -MF "${OBJECTDIR}/_ext/1472/main.o.d" -o ${OBJECTDIR}/_ext/1472/main.o ../main.c    -DXPRJ_default=$(CND_CONF)    $(COMPARISON_BUILD) 
-	
 ${OBJECTDIR}/_ext/1472/usb_descriptors.o: ../usb_descriptors.c  nbproject/Makefile-${CND_CONF}.mk
 	@${MKDIR} "${OBJECTDIR}/_ext/1472" 
 	@${RM} ${OBJECTDIR}/_ext/1472/usb_descriptors.o.d 
@@ -172,6 +172,18 @@ ${OBJECTDIR}/_ext/1472/DelayPIC32.o: ../DelayPIC32.c  nbproject/Makefile-${CND_C
 	@${RM} ${OBJECTDIR}/_ext/1472/DelayPIC32.o.d 
 	@${RM} ${OBJECTDIR}/_ext/1472/DelayPIC32.o 
 	@${FIXDEPS} "${OBJECTDIR}/_ext/1472/DelayPIC32.o.d" $(SILENT) -rsi ${MP_CC_DIR}../  -c ${MP_CC}  $(MP_EXTRA_CC_PRE)  -g -x c -c -mprocessor=$(MP_PROCESSOR_OPTION)  -Os -DPIC32MX795F512L_PIM -I".." -I"../../../../Microchip/Include" -I"../../../../Microchip/Include/USB" -I"../../../../Microchip/USB" -I"." -MMD -MF "${OBJECTDIR}/_ext/1472/DelayPIC32.o.d" -o ${OBJECTDIR}/_ext/1472/DelayPIC32.o ../DelayPIC32.c    -DXPRJ_default=$(CND_CONF)    $(COMPARISON_BUILD) 
+	
+${OBJECTDIR}/_ext/1472/CRC\ Check.o: ../CRC\ Check.c  nbproject/Makefile-${CND_CONF}.mk
+	@${MKDIR} "${OBJECTDIR}/_ext/1472" 
+	@${RM} "${OBJECTDIR}/_ext/1472/CRC Check.o".d 
+	@${RM} "${OBJECTDIR}/_ext/1472/CRC Check.o" 
+	@${FIXDEPS} "${OBJECTDIR}/_ext/1472/CRC Check.o.d" $(SILENT) -rsi ${MP_CC_DIR}../  -c ${MP_CC}  $(MP_EXTRA_CC_PRE)  -g -x c -c -mprocessor=$(MP_PROCESSOR_OPTION)  -Os -DPIC32MX795F512L_PIM -I".." -I"../../../../Microchip/Include" -I"../../../../Microchip/Include/USB" -I"../../../../Microchip/USB" -I"." -MMD -MF "${OBJECTDIR}/_ext/1472/CRC Check.o.d" -o "${OBJECTDIR}/_ext/1472/CRC Check.o" "../CRC Check.c"    -DXPRJ_default=$(CND_CONF)    $(COMPARISON_BUILD) 
+	
+${OBJECTDIR}/_ext/1472/main.o: ../main.c  nbproject/Makefile-${CND_CONF}.mk
+	@${MKDIR} "${OBJECTDIR}/_ext/1472" 
+	@${RM} ${OBJECTDIR}/_ext/1472/main.o.d 
+	@${RM} ${OBJECTDIR}/_ext/1472/main.o 
+	@${FIXDEPS} "${OBJECTDIR}/_ext/1472/main.o.d" $(SILENT) -rsi ${MP_CC_DIR}../  -c ${MP_CC}  $(MP_EXTRA_CC_PRE)  -g -x c -c -mprocessor=$(MP_PROCESSOR_OPTION)  -Os -DPIC32MX795F512L_PIM -I".." -I"../../../../Microchip/Include" -I"../../../../Microchip/Include/USB" -I"../../../../Microchip/USB" -I"." -MMD -MF "${OBJECTDIR}/_ext/1472/main.o.d" -o ${OBJECTDIR}/_ext/1472/main.o ../main.c    -DXPRJ_default=$(CND_CONF)    $(COMPARISON_BUILD) 
 	
 endif
 
