@@ -10,9 +10,9 @@
 
 /************************************ INCLUDES ******************************************/
 // #define USE_USB
-#define USE_PWM
-#define USE_AD
-// #define USE_LINX
+//#define USE_PWM
+//#define USE_AD
+#define USE_LINX
 
 #include "USB/usb.h"
 #include "USB/usb_function_cdc.h"
