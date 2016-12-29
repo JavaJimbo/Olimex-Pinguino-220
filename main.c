@@ -8,12 +8,15 @@
  * Added compiler options: USE_USB, USE_AD, USE_LINX, USE_PWM
  * Implemented single byte fast read mode
  * 12-29-16: Swapped in CRC-7 check. 
+ * Modified start time constants START_ONE etc.
+ * PWM OC1 is on PORTC 0 which is A0 on the Olimex 220 board
+ * 
  ****************************************************************************************/
 
-// #define USE_USB
-// #define USE_PWM
-// #define USE_AD
-#define USE_LINX
+#define USE_USB
+#define USE_PWM
+#define USE_AD
+// #define USE_LINX
 
 #include "USB/usb.h"
 #include "USB/usb_function_cdc.h"
@@ -53,10 +56,9 @@
 #define true TRUE
 
 #define START_ONE 80
-#define STOP 3000
 #define START_TWO 80
-#define START_THREE 40
-#define START_FOUR 40
+#define START_THREE 20
+#define START_FOUR 20
 #define TIMEOUT 200
 #define UART_TIMEOUT 400
 #define MAXBITLENGTH 20
@@ -72,31 +74,22 @@
 
 /** V A R I A B L E S ********************************************************/
 #define MAXDATABYTES 64
-unsigned char arrData[MAXDATABYTES];
-unsigned char HOSTRxBuffer[MAXBUFFER];
-unsigned char HOSTRxBufferFull = FALSE;
+unsigned char   arrData[MAXDATABYTES];
+unsigned char   HOSTRxBuffer[MAXBUFFER];
+unsigned char   HOSTRxBufferFull = FALSE;
 
-unsigned char HOSTTxBuffer[MAXBUFFER];
+unsigned char   HOSTTxBuffer[MAXBUFFER];
+unsigned char   USBRxBuffer[MAXBUFFER];
+unsigned char   USBTxBuffer[MAXBUFFER];
 
-unsigned char USBRxBuffer[MAXBUFFER];
-unsigned char USBTxBuffer[MAXBUFFER];
+unsigned short  HOSTRxLength = 0;
+unsigned short  HOSTTxLength = 0;
 
-unsigned short HOSTRxLength = 0;
-unsigned short HOSTTxLength = 0;
-
-char USB_In_Buffer[64];
-char USB_Out_Buffer[64];
-
-BOOL stringPrinted;
-volatile BOOL buttonPressed;
-volatile BYTE buttonCount;
-
-unsigned char dataReady = FALSE;
-unsigned short previousExpected = 0, numExpectedBytes = 0;
-unsigned char error = 0;
-unsigned char RXstate = 0;
-unsigned char timeoutFlag = FALSE;
-unsigned short numBytesReceived = 0;
+unsigned short  previousExpected = 0, numExpectedBytes = 0;
+unsigned char   error = 0;
+unsigned char   RXstate = 0;
+unsigned char   timeoutFlag = FALSE;
+unsigned short  numBytesReceived = 0;
 
 /** P R I V A T E  P R O T O T Y P E S ***************************************/
 // extern unsigned short CRCcalculate(unsigned char *message, unsigned char nBytes);
@@ -106,12 +99,10 @@ void ProcessIO(void);
 void USBDeviceTasks(void);
 void YourHighPriorityISRCode();
 void YourLowPriorityISRCode();
-void USBCBSendResume(void);
+// void USBCBSendResume(void);
 void BlinkUSBStatus(void);
 void UserInit(void);
 void ConfigAd(void);
-
-unsigned char pushbuttonFlag = FALSE;
 
 #define MAXPOTS 1
 unsigned short arrPots[MAXPOTS];
@@ -121,20 +112,10 @@ int main(void) {
     unsigned short trialCounter = 0;
     unsigned char CRCcheck, CRCdata;
     signed char rawVectx, rawVecty, rawVectz;
-    unsigned char motionData = 0;
-    unsigned long loopCounter = 0;
-    unsigned short ADCounter = 10;  
-    unsigned char ready;
-
-    union {
-        unsigned char byte[2];
-        unsigned short integer;
-    } convert;
-
-    InitializeSystem();
-
-    DelayMs(200);
+    unsigned short loopCounter = 0;
     
+    InitializeSystem();
+    DelayMs(200);    
     printf("\rTESTING: ");
 
 #ifdef USE_USB
@@ -154,12 +135,8 @@ int main(void) {
 #endif
     
     while (1) {
-
 #ifdef USE_LINX     
         if (numBytesReceived) {
-            //CRCcheck = CRCcalculate(&arrData[1], numBytesReceived - 3);
-            //convert.byte[0] = arrData[numBytesReceived - 2];
-            //convert.byte[1] = arrData[numBytesReceived - 1];
 
             CRCcheck = getCRC7(arrData, numBytesReceived - 1);
             CRCdata = arrData[numBytesReceived - 1];
@@ -170,43 +147,7 @@ int main(void) {
             rawVecty = (signed char) arrData[2];
             rawVectz = (signed char) arrData[3];            
 
-            /*
-            motionData = arrData[1];
-             
-            convert.byte[0] = arrData[2];
-            convert.byte[1] = arrData[3];
-            rawVectx = (short) convert.integer / 4;
-
-            convert.byte[0] = arrData[4];
-            convert.byte[1] = arrData[5];
-            rawVectz = (short) convert.integer / 4;
-
-            convert.byte[0] = arrData[6];
-            convert.byte[1] = arrData[7];
-            rawVecty = (short) convert.integer / 4;
-            */
-
             printf("\r%d: X: %d, Y: %d, Z: %d", ++trialCounter, (int) rawVectx, (int) rawVecty, (int) rawVectz);
-
-            /*
-            printf("\r");
-            if (0b00000010 & motionData) {
-                if (0b00000001 & motionData) printf("-X, ");
-                else printf("+X, ");
-            }
-            if (0b00001000 & motionData) {
-                if (0b00000100 & motionData) printf("-Y, ");
-                else printf("+Y, ");
-            }
-            if (0b00100000 & motionData) {
-                if (0b00010000 & motionData) printf("-Z ");
-                else printf("+Z ");
-            }
-            if (timeoutFlag) {
-                printf("\rTIMEOUT");
-                timeoutFlag = FALSE;
-            }
-             */
             
             numBytesReceived = 0;
         } // End if (numBytesReceived)
@@ -223,12 +164,11 @@ int main(void) {
         if (loopCounter) loopCounter--;
         if (!loopCounter) {
             loopCounter = 100;            
-            if (ADCounter) ADCounter--;
-            printf("\rPWM value: %d", (int) arrPots[0]);
+            // printf("\rPWM value: %d", (int) arrPots[0]);
             OC1RS = arrPots[0];
             if (ADflag) {
                 ADflag = FALSE;
-                printf(" AD INT");
+                // printf(" AD INT");
                 mAD1IntEnable(INT_ENABLED);
             }
         }        
@@ -288,30 +228,39 @@ static void InitializeSystem(void) {
 
 #ifdef USE_LINX
 void __ISR(_CHANGE_NOTICE_VECTOR, ipl2) ChangeNotice_Handler(void) {
-    static unsigned short Timer2Counter = 0;
-    static unsigned short byteMask = 0x0001;
-    static unsigned short dataInt = 0x00;
-    static unsigned char oddFlag = FALSE;
-    static unsigned short dataIndex = 0;
-    unsigned short PORTin, RX_PIN;
+    unsigned short   Timer2Counter = 0;
+    static unsigned short   byteMask = 0x0001;
+    static unsigned short   dataInt = 0x00;
+    static unsigned char    oddFlag = FALSE;
+    static unsigned short   dataIndex = 0;
+    unsigned short          PORTin, RX_PIN;
 
     // Step #1 - always clear the mismatch condition first
     PORTin = PORTBbits.RB0;
-    if (!(PORTin & 0x0001)) pushbuttonFlag = TRUE;
 
     // Step #2 - then clear the interrupt flag for PORTB
-    IFS1bits.CNBIF = 0;
+    IFS1bits.CNBIF = 0;    
+    
+    if (TEST_OUT) TEST_OUT = 0;
+    else TEST_OUT = 1;
 
-    TEST_OUT = 1;
-
-    Timer2Counter = TMR2 / 75;
-    TMR2 = 0x0000;
-
-    if (!PORTin) RX_PIN = 0;
+    Timer2Counter = TMR2 / 75;  // Timer2Counter is the elapsed time since last interrupt
+                                // in increments of 10 microseconds. 1/10 micro = 100 kHz
+                                // 60 Mhz system clock / 8 prescale / 75 = 100 khz
+    TMR2 = 0x0000;              // Reset both timers.
+    TMR4 = 0x0000;
+    mT4ClearIntFlag();          // Clear the Timer 4 interrupt flag to ensure
+                                // it won't re-enable interrupt on change for another 100 microseconds
+    if (!PORTin) RX_PIN = 0;    
     else RX_PIN = 1;
 
-    // if (RXstate < 5) ConfigIntCN(CHANGE_INT_OFF | CHANGE_INT_PRI_2);
-
+    if (RXstate < 5) IEC1bits.CNBIE = 0;    // If the RXstate hasn't yet incremented to 5,
+                                            // then a START transmission sequence hasn't completed,
+                                            // and we assume the LINX isn't receiving valid data.
+                                            // Input on change interrupts are temporarily disabled here 
+                                            // until Timer 4 re-enables them in 100 microseconds.
+                                            // Otherwise random input noise could swamp the CPU
+                                            // with interrupts. 
     if (RXstate && (Timer2Counter > TIMEOUT)) {
         if (RXstate == 6) {
             timeoutFlag = TRUE;
@@ -323,38 +272,34 @@ void __ISR(_CHANGE_NOTICE_VECTOR, ipl2) ChangeNotice_Handler(void) {
         RXstate = 1;
 
     // RX_IN goes LOW after long pulse: second START
-    if (!RX_PIN && Timer2Counter > START_ONE && Timer2Counter < START_ONE * 2)
-        RXstate = 2;
-
+    if (!RX_PIN && Timer2Counter > START_ONE) RXstate = 2;
     // RX_IN goes HIGH: third START      
     if (RX_PIN && RXstate == 2) {
-        if (Timer2Counter > START_TWO && Timer2Counter < START_TWO * 2)
-            RXstate++;
+        if (Timer2Counter > START_TWO) RXstate++;
         else RXstate = 0;
-        // RX_IN goes LOW: fourth START                 
+    // RX_IN goes LOW: fourth START                 
     } else if (RXstate == 3) {
-        if (Timer2Counter > START_THREE && Timer2Counter < START_THREE * 2)
-            RXstate++;
+        if (Timer2Counter > START_THREE) RXstate++;
         else RXstate = 0;
-        // RX_IN goes HIGH: dummy bit even pulse
+    // RX_IN goes HIGH: dummy bit even pulse
     } else if (RXstate == 4) {
-        if (Timer2Counter > START_FOUR && Timer2Counter < START_FOUR * 2) RXstate++;
+        if (Timer2Counter > START_FOUR) RXstate++;
         else RXstate = 0;
-        // RX_IN goes LOW: dummy bit odd pulse                  
-    } else if (RXstate == 5) {
+    // RX_IN goes LOW: dummy bit odd pulse                  
+    } else if (RXstate == 5) {        
         byteMask = 0x01;
         oddFlag = FALSE;
         dataInt = 0x00;
         error = 0;
-        dataIndex = 0;
+        dataIndex = 0;        
         RXstate++;
-        // RX STATE = 6:
-        // DATA BITS get processed here. 
-        // Clock state toggles between EVEN and ODD with each transition.
-        // Data bit is always read on ODD half of clock cycle, 
-        // indicated when oddFlag = TRUE.
-        // All LONG pulses begin and end when clock is ODD,
-        // so data bit is always read when long pulse is detected.
+    // RX STATE = 6:
+    // DATA BITS get processed here. 
+    // Clock state toggles between EVEN and ODD with each transition.
+    // Data bit is always read on ODD half of clock cycle, 
+    // indicated when oddFlag = TRUE.
+    // All LONG pulses begin and end when clock is ODD,
+    // so data bit is always read when long pulse is detected.
     } else if (RXstate == 6) {
         // If this a long pulse, data bit always gets read,
         // since all long pulses end on odd clock cycle:
@@ -370,8 +315,8 @@ void __ISR(_CHANGE_NOTICE_VECTOR, ipl2) ChangeNotice_Handler(void) {
             } else byteMask = byteMask << 1;
             oddFlag = FALSE;
 
-            // Otherwise, this must be a short pulse,
-            // in which case 
+        // Otherwise, this must be a short pulse,
+        // in which case 
         } else if (oddFlag) {
             oddFlag = FALSE;
             if (RX_PIN) dataInt = dataInt | byteMask;
@@ -386,21 +331,20 @@ void __ISR(_CHANGE_NOTICE_VECTOR, ipl2) ChangeNotice_Handler(void) {
         } else oddFlag = TRUE;
 
         if (dataIndex >= numExpectedBytes && numExpectedBytes != 0) {
-            numBytesReceived = dataIndex;
+            numBytesReceived = dataIndex;            
             dataIndex = 0;
-            RXstate = 0;
+            RXstate = 0;            
         }
-    } // End else    
-
-    TEST_OUT = 0;
+    } // End else        
 }
 #endif
 
-void __ISR(_TIMER_2_VECTOR, ipl5) Timer2Handler(void) {
-    mT2ClearIntFlag(); // clear the interrupt flag    
-
-    //if (TEST_OUT) TEST_OUT = 0;
-    //else TEST_OUT = 1;
+// This interrupt occurs at 10 khz, or once every 100 microseconds
+// The purpose is to re enable interrupt on change 
+// for LINX input on PORT B
+void __ISR(_TIMER_4_VECTOR, ipl5) Timer4Handler(void) {
+    mT4ClearIntFlag();  // Clear the interrupt flag    
+    IEC1bits.CNBIE = 1; // Enable CN interrupts
 }
 
 /******************************************************************************
@@ -429,11 +373,6 @@ void UserInit(void) {
 
     mJTAGPortEnable(false);
 
-    // Initialize all of the debouncing variables
-    buttonCount = 0;
-    buttonPressed = FALSE;
-    stringPrinted = TRUE;
-
     // Initialize all of the LED pins
     mInitAllLEDs();
     PORTSetPinsDigitalOut(IOPORT_A, BIT_10);
@@ -443,19 +382,20 @@ void UserInit(void) {
     PORTSetPinsDigitalOut(IOPORT_B, BIT_1);
 
 #ifdef USE_LINX
-    CNCONBbits.ON = 1; // CN is enabled
-    CNCONBbits.SIDL = 0; // CPU Idle does not affect CN operation
-    CNENBbits.CNIEB0 = 1; // Enable RB0 change notice    
+    // Set up interrupt on change for the PORT B LINX receiver input pin RB0
+    CNCONBbits.ON = 1;      // CN is enabled
+    CNCONBbits.SIDL = 0;    // CPU Idle does not affect CN operation
+    CNENBbits.CNIEB0 = 1;   // Enable RB0 change notice    
 
     // Read port B to clear mismatch condition
     dummyRead = PORTB;
 
     // Clear CN interrupt flag
-    IFS1bits.CNBIF = 0; // Clear status register for port B
-    IPC8CLR = _IPC8_CNIP_MASK; // Clear priority
-    IPC8SET = (2 << _IPC8_CNIP_POSITION); // Set priority (2)
-    IEC1bits.CNBIE = 1; // Enable CN interrupts on port B    
-    CNPUBbits.CNPUB0 = 1; // Pullup enable  
+    IFS1bits.CNBIF = 0;                     // Clear status register for port B
+    IPC8CLR = _IPC8_CNIP_MASK;              // Clear priority
+    IPC8SET = (2 << _IPC8_CNIP_POSITION);   // Set priority (2)
+    IEC1bits.CNBIE = 1;                     // Enable CN interrupts on port B    
+    CNPUBbits.CNPUB0 = 1;                   // Pullup enable  
 #endif    
 
     // Set up main UART    
@@ -472,33 +412,50 @@ void UserInit(void) {
     INTEnable(INT_U2TX, INT_DISABLED);
     INTEnable(INT_SOURCE_UART_RX(HOSTuart), INT_ENABLED);
     INTSetVectorPriority(INT_VECTOR_UART(HOSTuart), INT_PRIORITY_LEVEL_2);
-    // INTSetVectorSubPriority(INT_VECTOR_UART(HOSTuart), INT_SUB_PRIORITY_LEVEL_0);        
-
-    // Set up Timer 2, no interrupts 
+    // INTSetVectorSubPriority(INT_VECTOR_UART(HOSTuart), INT_SUB_PRIORITY_LEVEL_0);  
+    
+    // Set up Timer 2 with no interrupts.
+    // This timer is used to measure the intervals
+    // between interrupts on change on the LINX receiver PORT B input pin.
+    // The interrupt on change routine divides the timer 2 counter TMR2 by 75
+    // to get multiples of 10 microseconds.
+    // So the 60 mhz system clock / 8 prescaler / 75 = 100 khz,
+    // which is the maximum resolution for the LINX input.
     T2CON = 0x00;
-    T2CONbits.TCKPS2 = 0; // 1:8 Prescaler
+    T2CONbits.TCKPS2 = 0;   // 1:8 Prescaler
     T2CONbits.TCKPS1 = 1;
     T2CONbits.TCKPS0 = 1;
-    T2CONbits.T32 = 0; // TMRx and TMRy form separate 16-bit timers
-    PR2 = 0xFFFF;
-    T2CONbits.TON = 1; // Let her rip   
-    // ConfigIntTimer2(T2_INT_ON | T2_INT_PRIOR_5);
+    T2CONbits.T32 = 0;      // TMRx and TMRy form separate 16-bit timers
+    PR2 = 0xFFFF;    
+    T2CONbits.TON = 1;      // Let her rip   
+        
+    // Set up Timer 4, to interrupt every 100 microseconds, 10 khz
+    T4CON = 0x00;
+    T4CONbits.TCKPS2 = 0;   // 1:8 Prescaler
+    T4CONbits.TCKPS1 = 1;
+    T4CONbits.TCKPS0 = 1;
+    T4CONbits.T32 = 0;      // TMRx and TMRy form separate 16-bit timers
+    PR4 = 750; 
+    T4CONbits.TON = 1;      // Let her rip   
+    ConfigIntTimer4(T4_INT_ON | T4_INT_PRIOR_5);
+    
 
 #ifdef USE_PWM    
     // Set up Timer 3 for PWM time base    
     T3CON = 0x00;
-    T3CONbits.TCKPS2 = 0; // 1:1 Prescaler
+    T3CONbits.TCKPS2 = 0;   // 1:1 Prescaler
     T3CONbits.TCKPS1 = 0;
     T3CONbits.TCKPS0 = 0;
-    PR3 = 1024; // Use 50 microsecond rollover for 20 khz
-    T3CONbits.TON = 1; // Let her rip
+    PR3 = 1024;             // Use 50 microsecond rollover for 20 khz
+    T3CONbits.TON = 1;      // Let her rip
 
+    // Set up PWM OC1 on PORTC 0 which is A0 on the Olimex 220 board:
     PPSOutput(1, RPC0, OC1);
     OC1CON = 0x00;
-    OC1CONbits.OC32 = 0; // 16 bit PWM
-    OC1CONbits.ON = 1; // Turn on PWM
-    OC1CONbits.OCTSEL = 1; // Use Timer 3 as PWM time base
-    OC1CONbits.OCM2 = 1; // PWM mode enabled, no fault pin
+    OC1CONbits.OC32 = 0;    // 16 bit PWM
+    OC1CONbits.ON = 1;      // Turn on PWM
+    OC1CONbits.OCTSEL = 1;  // Use Timer 3 as PWM time base
+    OC1CONbits.OCM2 = 1;    // PWM mode enabled, no fault pin
     OC1CONbits.OCM1 = 1;
     OC1CONbits.OCM0 = 0;
     OC1RS = 256;
@@ -612,19 +569,7 @@ void USBCBWakeFromSuspend(void) {
 }
 
 void USBCB_SOF_Handler(void) {
-    if (buttonPressed == PUSHBUTTON_DOWN) {
-        if (buttonCount != 0)
-            buttonCount--;
-        else {
-            //This is reverse logic since the pushbutton is active low
-            buttonPressed = !PUSHBUTTON_DOWN;
-            //Wait 100ms before the next press can be generated
-            buttonCount = 100;
-        }
-    } else {
-        if (buttonCount != 0)
-            buttonCount--;
-    }
+    ;
 }
 
 void USBCBErrorHandler(void) {
@@ -643,6 +588,7 @@ void USBCBInitEP(void) {
     CDCInitEP();
 }
 
+/*
 void USBCBSendResume(void) {
     static WORD delay_count;
 
@@ -668,7 +614,7 @@ void USBCBSendResume(void) {
         }
     }
 }
-
+*/
 
 #if defined(ENABLE_EP0_DATA_RECEIVED_CALLBACK)
 
@@ -767,11 +713,6 @@ void ProcessIO(void) {
 #ifdef USE_AD    
 void ConfigAd(void) {
 
-    //mPORTBSetPinsAnalogIn(BIT_0);
-    //mPORTBSetPinsAnalogIn(BIT_1);
-    //mPORTBSetPinsAnalogIn(BIT_2);
-    //mPORTBSetPinsAnalogIn(BIT_3);
-
     mPORTCSetPinsAnalogIn(BIT_1);
 
     // ---- configure and enable the ADC ----
@@ -793,13 +734,8 @@ void ConfigAd(void) {
     // #define PARAM4    ENABLE_AN0_ANA | ENABLE_AN1_ANA| ENABLE_AN2_ANA | ENABLE_AN3_ANA
 #define PARAM4    ENABLE_AN7_ANA
 
-    // Only scan AN0, AN1, AN2, AN3 for now
-    //#define PARAM5   SKIP_SCAN_AN4 |SKIP_SCAN_AN5 |SKIP_SCAN_AN6 |SKIP_SCAN_AN7 |\
-//                    SKIP_SCAN_AN8 |SKIP_SCAN_AN9 |SKIP_SCAN_AN10 |\
-//                      SKIP_SCAN_AN11 | SKIP_SCAN_AN12 |SKIP_SCAN_AN13 |SKIP_SCAN_AN14 |SKIP_SCAN_AN15
-    //
 
-    // USE AN7    
+// USE AN7    
 #define PARAM5 SKIP_SCAN_AN0 |SKIP_SCAN_AN1 |SKIP_SCAN_AN2 |SKIP_SCAN_AN3 |\
 SKIP_SCAN_AN4 | SKIP_SCAN_AN5 | SKIP_SCAN_AN6 |\
 SKIP_SCAN_AN8 | SKIP_SCAN_AN9 | SKIP_SCAN_AN10 |\
