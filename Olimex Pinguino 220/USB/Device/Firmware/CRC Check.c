@@ -1,21 +1,24 @@
-// 	CRC Check.c 
-//
-//	This file contains the CRCcalculate()
-//	for doing CRC's for Modbus communications.
-//	This CRC is needed for Modbus serial packets
-//	but not for TCP/IP since Ethernet protocol 
-//	has its own built-in CRC or something similiar.
-//
-//	Modbus CRC's are two byte integers
-//	and require the table crc_tab16[] declared below.
-//
-//	The routines in this file were found at:
-// 	http://www.lammertbies.nl/comm/info/crc-calculation.html
-//
-// 	File download "lib_crc.zip" at
-//	http://www.lammertbies.nl/comm/software/index.html
-// unsigned short CRCcalculate(unsigned char *message, unsigned char nBytes);
-
+/* 	CRC Check.c 
+ *
+ *	This file contains the CRCcalculate()
+ *	for doing CRC's for Modbus communications.
+ *	This CRC is needed for Modbus serial packets
+ *	but not for TCP/IP since Ethernet protocol 
+ *	has its own built-in CRC or something similiar.
+ *
+ *  Modbus CRC's are two byte integers
+ *  and require the table crc_tab16[] declared below.
+ *
+ *	The routines in this file were found at:
+ *	http://www.lammertbies.nl/comm/info/crc-calculation.html
+ *
+ *	File download "lib_crc.zip" at
+ *	http://www.lammertbies.nl/comm/software/index.html
+ *
+ *  12-29-16: Added getCRC7() and reverseByte()
+ * 
+ */
+ 
 #define	MODBUS_POLYNOMIAL	0xA001
 
 const unsigned short crc_tab16[256]={
@@ -38,6 +41,8 @@ const unsigned short crc_tab16[256]={
 };
 
 unsigned char testBuffer[128];
+unsigned char reverseByte(unsigned char dataByte);
+unsigned char getCRC7(unsigned char *ptrMessage, short numBytes);
 
 /*******************************************************************\
 *                                                                   *
@@ -88,6 +93,7 @@ unsigned short i, j, k, crc, c;
 *   of the data to be checked.                                      *
 *                                                                   *
 \*******************************************************************/
+/*
 unsigned short update_crc_16 (unsigned short crc, unsigned char nextVal) {
 unsigned short tmp, shortVal;
 
@@ -117,10 +123,67 @@ unsigned char i;
 	
 	return(CRCresult);
 }	
+*/
 
+// This flips the order of bits in the input data byte
+// and returns the result, so the LSB is first and MSB is last
+unsigned char reverseByte(unsigned char dataByte){
+    unsigned char i, byteReversed, byteMask, reverseMask;
+        
+    byteReversed = 0x00;
+    byteMask = 0x01;
+    reverseMask = 0x80;
+    for (i = 0; i < 8; i++) {
+        if (dataByte & byteMask) byteReversed |= reverseMask;
+        byteMask = byteMask << 1;
+        reverseMask = reverseMask >> 1;
+    }   
+    return (byteReversed);
+}
 
+#define NULL 0
+#define CRCpolynomlial 0b10001001  // This is 0x91 flipped
+// This routine generates a seven bit CRC 
+// using data from an array of one or more bytes.
+// The CRC is reversed to create the return value
+// with an MSB that is a 0.
+unsigned char getCRC7(unsigned char *ptrMessage, short numBytes){
+    unsigned char CRCresult, CRCbyte, byteMask, nextByte;
+    short i;
 
-
+    if (ptrMessage == NULL || numBytes == 0) return(0);
+    
+    // Get the first message byte and spin it around, LSB first:
+    CRCbyte = reverseByte(ptrMessage[0]); 
+    
+    // Get the next message byte. Bits will be fetched from it LSB first:
+    if (numBytes > 1) nextByte = ptrMessage[1]; 
+    else nextByte = 0x00;
+    
+    byteMask = 0x01;       
+    i = 0;
+    while (i < numBytes){
+        // If the MSB is a '1', XOR byte, otherwise, do nothing:
+        if (CRCbyte & 0x80) CRCbyte = CRCbyte ^ CRCpolynomlial;
+        // Shift result up one bit, and set the LSB to 0:
+        CRCbyte = (CRCbyte << 1) & 0xFE;
+        // Get next message bit and OR it to LSB:
+        if (nextByte & byteMask) CRCbyte |= 0x01;           
+        // Shift mask up for next message bit:
+        if (byteMask < 0x80) byteMask = byteMask << 1;
+        // If all eight bits have been fetched,
+        // get next message byte and reset mask:       
+        else {            
+            if (i < numBytes - 2) nextByte = ptrMessage[i + 2];
+            else nextByte = 0x00;
+            i++;
+            byteMask = 0x01;
+        }
+    }
+    // When all done, flip CRC around to get result:
+    CRCresult = reverseByte(CRCbyte);
+    return (CRCresult);
+}
 	
 	
 		
