@@ -7,12 +7,12 @@
  * 12-28-16: Got PWM output working. A/D conversion routines added and tested.
  * Added compiler options: USE_USB, USE_AD, USE_LINX, USE_PWM
  * Implemented single byte fast read mode
+ * 12-29-16: Swapped in CRC-7 check. 
  ****************************************************************************************/
 
-/************************************ INCLUDES ******************************************/
 // #define USE_USB
-//#define USE_PWM
-//#define USE_AD
+// #define USE_PWM
+// #define USE_AD
 #define USE_LINX
 
 #include "USB/usb.h"
@@ -99,7 +99,8 @@ unsigned char timeoutFlag = FALSE;
 unsigned short numBytesReceived = 0;
 
 /** P R I V A T E  P R O T O T Y P E S ***************************************/
-extern unsigned short CRCcalculate(unsigned char *message, unsigned char nBytes);
+// extern unsigned short CRCcalculate(unsigned char *message, unsigned char nBytes);
+extern unsigned char getCRC7(unsigned char *ptrMessage, short numBytes);
 static void InitializeSystem(void);
 void ProcessIO(void);
 void USBDeviceTasks(void);
@@ -118,7 +119,7 @@ unsigned char ADflag = FALSE;
 
 int main(void) {
     unsigned short trialCounter = 0;
-    unsigned short CRCcheck;
+    unsigned char CRCcheck, CRCdata;
     signed char rawVectx, rawVecty, rawVectz;
     unsigned char motionData = 0;
     unsigned long loopCounter = 0;
@@ -156,18 +157,22 @@ int main(void) {
 
 #ifdef USE_LINX     
         if (numBytesReceived) {
-            CRCcheck = CRCcalculate(&arrData[1], numBytesReceived - 3);
-            convert.byte[0] = arrData[numBytesReceived - 2];
-            convert.byte[1] = arrData[numBytesReceived - 1];
+            //CRCcheck = CRCcalculate(&arrData[1], numBytesReceived - 3);
+            //convert.byte[0] = arrData[numBytesReceived - 2];
+            //convert.byte[1] = arrData[numBytesReceived - 1];
 
-            if (convert.integer != CRCcheck) printf("\r\rCRC ERROR: %X != %X", convert.integer, CRCcheck);
-
-            motionData = arrData[1];
-            rawVectx = (signed char) arrData[2];
-            rawVecty = (signed char) arrData[3];
-            rawVectz = (signed char) arrData[4];            
+            CRCcheck = getCRC7(arrData, numBytesReceived - 1);
+            CRCdata = arrData[numBytesReceived - 1];
+            
+            if (CRCcheck != CRCdata) printf("\rCRC ERROR:");
+            
+            rawVectx = (signed char) arrData[1];
+            rawVecty = (signed char) arrData[2];
+            rawVectz = (signed char) arrData[3];            
 
             /*
+            motionData = arrData[1];
+             
             convert.byte[0] = arrData[2];
             convert.byte[1] = arrData[3];
             rawVectx = (short) convert.integer / 4;
@@ -182,7 +187,8 @@ int main(void) {
             */
 
             printf("\r%d: X: %d, Y: %d, Z: %d", ++trialCounter, (int) rawVectx, (int) rawVecty, (int) rawVectz);
-            
+
+            /*
             printf("\r");
             if (0b00000010 & motionData) {
                 if (0b00000001 & motionData) printf("-X, ");
@@ -200,9 +206,12 @@ int main(void) {
                 printf("\rTIMEOUT");
                 timeoutFlag = FALSE;
             }
+             */
             
             numBytesReceived = 0;
         } // End if (numBytesReceived)
+       
+            
         if (error) {
             printf("\rError: %X", error);
             error = 0;
@@ -354,7 +363,7 @@ void __ISR(_CHANGE_NOTICE_VECTOR, ipl2) ChangeNotice_Handler(void) {
             if (byteMask == 0x80) {
                 byteMask = 0x01;
                 if (dataIndex == 0) {
-                    numExpectedBytes = dataInt + 3;
+                    numExpectedBytes = dataInt + 2;
                 }
                 if (dataIndex < MAXDATABYTES) arrData[dataIndex++] = (unsigned char) dataInt;
                 dataInt = 0x00;
@@ -369,7 +378,7 @@ void __ISR(_CHANGE_NOTICE_VECTOR, ipl2) ChangeNotice_Handler(void) {
             if (byteMask == 0x80) {
                 byteMask = 0x01;
                 if (dataIndex == 0) {
-                    numExpectedBytes = dataInt + 3;
+                    numExpectedBytes = dataInt + 2;
                 }
                 if (dataIndex < MAXDATABYTES) arrData[dataIndex++] = (unsigned char) dataInt;
                 dataInt = 0x00;
@@ -813,7 +822,7 @@ SKIP_SCAN_AN11 | SKIP_SCAN_AN12 | SKIP_SCAN_AN13 | SKIP_SCAN_AN14 | SKIP_SCAN_AN
 }
 #endif
 
-void __ISR(_ADC_VECTOR, ipl6) AdcHandler(void) {
+void __ISR(_ADC_VECTOR, ipl6) ADHandler(void) {
     unsigned short offSet;
     unsigned char i;
 
