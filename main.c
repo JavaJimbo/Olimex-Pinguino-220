@@ -11,6 +11,7 @@
  * Modified start time constants START_ONE etc.
  * PWM OC1 is on PORTC 0 which is A0 on the Olimex 220 board
  * Added Timer 4 to enable interrupt on change every 100 micro seconds
+ * Github Test
  ****************************************************************************************/
 
 #define USE_USB
