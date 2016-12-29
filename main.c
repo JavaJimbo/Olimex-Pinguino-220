@@ -1,18 +1,20 @@
-/***************************************************************************************
- * FileName:  main.c
- * Project:   Olimex Pinguino 220 for PIC32MX220F032D 
- * Compiler:  XC32 V1.30
- *  
- * 12-18-2016: Got USB communication and UART Rx/Tx 
- *  working using PPS Peripheral Pin Select.
- *  System clock set to 60 Mhz. Got LED #1 and #2 working.
- *  ProcessIO() implements USB-UART bridge.
- *  12-19-16: Tested interrupt-on-change and Timer interrupts for LINX ommunication.
- *  Got PWM output working.
- *  12-21-16: A/D conversion routines added
+ /***************************************************************************************
+ * FileName:  main.c Includes LINX communication with MAGIC WAND & ACCELEROMETER
+ * 
+ * 12-19-16: Added LINX communication with magic wand/accelerometer
+ * Interference from USB causes lots of errors.
+ * 12-28-16: USB DISABLED for use with LINX communication.
+ * 12-28-16: Got PWM output working. A/D conversion routines added and tested.
+ * Added compiler options: USE_USB, USE_AD, USE_LINX, USE_PWM
+ * Implemented single byte fast read mode
  ****************************************************************************************/
 
 /************************************ INCLUDES ******************************************/
+// #define USE_USB
+//#define USE_PWM
+//#define USE_AD
+#define USE_LINX
+
 #include "USB/usb.h"
 #include "USB/usb_function_cdc.h"
 #include "HardwareProfile.h"
@@ -107,90 +109,137 @@ void USBCBSendResume(void);
 void BlinkUSBStatus(void);
 void UserInit(void);
 void ConfigAd(void);
-#define MAXPOTS 4
-unsigned char arrPots[MAXPOTS];
 
 unsigned char pushbuttonFlag = FALSE;
+
+#define MAXPOTS 1
+unsigned short arrPots[MAXPOTS];
+unsigned char ADflag = FALSE;
 
 int main(void) {
     unsigned short trialCounter = 0;
     unsigned short CRCcheck;
-    short rawVectx, rawVecty, rawVectz;
-    unsigned char motionData = 0;    
-    
+    signed char rawVectx, rawVecty, rawVectz;
+    unsigned char motionData = 0;
+    unsigned long loopCounter = 0;
+    unsigned short ADCounter = 10;  
+    unsigned char ready;
+
     union {
         unsigned char byte[2];
         unsigned short integer;
     } convert;
-    
+
     InitializeSystem();
-    ConfigAd();
+
     DelayMs(200);
+    
+    printf("\rTESTING: ");
 
-    printf("\rTesting LINX Communication ...");
+#ifdef USE_USB
+    printf("USB BRIDGE, ");
+#endif    
 
+#ifdef USE_LINX
+    printf("LINX COMMUNICATION, ");    
+#endif
+
+#ifdef USE_AD
+    printf(" AD CONVERSION, ");
+#endif    
+    
+#ifdef USE_PWM
+    printf("PWM");
+#endif
+    
     while (1) {
+
+#ifdef USE_LINX     
         if (numBytesReceived) {
             CRCcheck = CRCcalculate(&arrData[1], numBytesReceived - 3);
             convert.byte[0] = arrData[numBytesReceived - 2];
             convert.byte[1] = arrData[numBytesReceived - 1];
 
             if (convert.integer != CRCcheck) printf("\r\rCRC ERROR: %X != %X", convert.integer, CRCcheck);
-                        
+
             motionData = arrData[1];
-            
+            rawVectx = (signed char) arrData[2];
+            rawVecty = (signed char) arrData[3];
+            rawVectz = (signed char) arrData[4];            
+
+            /*
             convert.byte[0] = arrData[2];
             convert.byte[1] = arrData[3];
             rawVectx = (short) convert.integer / 4;
-            
+
             convert.byte[0] = arrData[4];
             convert.byte[1] = arrData[5];
             rawVectz = (short) convert.integer / 4;
-            
+
             convert.byte[0] = arrData[6];
             convert.byte[1] = arrData[7];
             rawVecty = (short) convert.integer / 4;
+            */
+
+            printf("\r%d: X: %d, Y: %d, Z: %d", ++trialCounter, (int) rawVectx, (int) rawVecty, (int) rawVectz);
             
-            printf ("\r\r%d: X: %d, Y: %d, Z: %d", ++trialCounter, (short) motionData, rawVectx, rawVecty, rawVectz);
-            printf ("\r");
-            if (0b00000010 & motionData){
+            printf("\r");
+            if (0b00000010 & motionData) {
                 if (0b00000001 & motionData) printf("-X, ");
-                else printf ("+X, ");
-            } 
-            if (0b00001000 & motionData){
+                else printf("+X, ");
+            }
+            if (0b00001000 & motionData) {
                 if (0b00000100 & motionData) printf("-Y, ");
-                else printf ("+Y, ");
-            }       
-            if (0b00100000 & motionData){
+                else printf("+Y, ");
+            }
+            if (0b00100000 & motionData) {
                 if (0b00010000 & motionData) printf("-Z ");
-                else printf ("+Z ");
-            }                         
+                else printf("+Z ");
+            }
             if (timeoutFlag) {
                 printf("\rTIMEOUT");
                 timeoutFlag = FALSE;
             }
+            
             numBytesReceived = 0;
-        }  // End if (numBytesReceived)
+        } // End if (numBytesReceived)
         if (error) {
             printf("\rError: %X", error);
             error = 0;
         }
-    }
-}
-/*
+#endif
+        
+#ifdef USE_AD
+        DelayMs(1);
+        if (loopCounter) loopCounter--;
+        if (!loopCounter) {
+            loopCounter = 100;            
+            if (ADCounter) ADCounter--;
+            printf("\rPWM value: %d", (int) arrPots[0]);
+            OC1RS = arrPots[0];
+            if (ADflag) {
+                ADflag = FALSE;
+                printf(" AD INT");
+                mAD1IntEnable(INT_ENABLED);
+            }
+        }        
+#endif        
+
+#ifdef USE_USB        
+        
 #if defined(USB_INTERRUPT)
-        if (USB_BUS_SENSE && (USBGetDeviceState() == DETACHED_STATE)) 
-            USBDeviceAttach();        
+        if (USB_BUS_SENSE && (USBGetDeviceState() == DETACHED_STATE))
+            USBDeviceAttach();
 #endif
-        #if defined(USB_POLLING)
+#if defined(USB_POLLING)
         // Check bus status and service USB interrupts.
-        USBDeviceTasks(); 
+        USBDeviceTasks();
 #endif
-        ProcessIO(); 
+        ProcessIO();
+#endif
+
     }//end while
-}    
-*/
- 
+}
 
 /********************************************************************
  * Function:        static void InitializeSystem(void)
@@ -222,23 +271,29 @@ static void InitializeSystem(void) {
 #endif
     UserInit();
 
-    // USBDeviceInit(); $$$$
+#ifdef USE_USB
+    USBDeviceInit();
+#endif
+
 }//end InitializeSystem
 
+#ifdef USE_LINX
 void __ISR(_CHANGE_NOTICE_VECTOR, ipl2) ChangeNotice_Handler(void) {
     static unsigned short Timer2Counter = 0;
     static unsigned short byteMask = 0x0001;
     static unsigned short dataInt = 0x00;
     static unsigned char oddFlag = FALSE;
     static unsigned short dataIndex = 0;
-    unsigned short PORTin, RX_PIN;   
-    
+    unsigned short PORTin, RX_PIN;
+
     // Step #1 - always clear the mismatch condition first
     PORTin = PORTBbits.RB0;
     if (!(PORTin & 0x0001)) pushbuttonFlag = TRUE;
 
     // Step #2 - then clear the interrupt flag for PORTB
     IFS1bits.CNBIF = 0;
+
+    TEST_OUT = 1;
 
     Timer2Counter = TMR2 / 75;
     TMR2 = 0x0000;
@@ -282,7 +337,7 @@ void __ISR(_CHANGE_NOTICE_VECTOR, ipl2) ChangeNotice_Handler(void) {
         oddFlag = FALSE;
         dataInt = 0x00;
         error = 0;
-        dataIndex = 0;        
+        dataIndex = 0;
         RXstate++;
         // RX STATE = 6:
         // DATA BITS get processed here. 
@@ -324,16 +379,20 @@ void __ISR(_CHANGE_NOTICE_VECTOR, ipl2) ChangeNotice_Handler(void) {
         if (dataIndex >= numExpectedBytes && numExpectedBytes != 0) {
             numBytesReceived = dataIndex;
             dataIndex = 0;
-            RXstate = 0;            
-        }   
+            RXstate = 0;
+        }
     } // End else    
-}
 
+    TEST_OUT = 0;
+}
+#endif
 
 void __ISR(_TIMER_2_VECTOR, ipl5) Timer2Handler(void) {
-    mT2ClearIntFlag(); // clear the interrupt flag        
-}
+    mT2ClearIntFlag(); // clear the interrupt flag    
 
+    //if (TEST_OUT) TEST_OUT = 0;
+    //else TEST_OUT = 1;
+}
 
 /******************************************************************************
  * Function:        void UserInit(void)
@@ -357,7 +416,7 @@ void __ISR(_TIMER_2_VECTOR, ipl5) Timer2Handler(void) {
  *
  *****************************************************************************/
 void UserInit(void) {
-unsigned long dummyRead;
+    unsigned long dummyRead;
 
     mJTAGPortEnable(false);
 
@@ -367,48 +426,33 @@ unsigned long dummyRead;
     stringPrinted = TRUE;
 
     // Initialize all of the LED pins
-    // mInitAllLEDs(); $$$$    
+    mInitAllLEDs();
     PORTSetPinsDigitalOut(IOPORT_A, BIT_10);
     PORTClearBits(IOPORT_A, BIT_10);
 
-    PORTSetPinsDigitalIn(IOPORT_B, BIT_0); 
-    PORTSetPinsDigitalOut(IOPORT_B, BIT_1);    
-    
-    CNCONBbits.ON = 1;      // CN is enabled
-    CNCONBbits.SIDL = 0;    // CPU Idle does not affect CN operation
-    CNENBbits.CNIEB0 = 1;   // Enable RB0 change notice    
-    
+    PORTSetPinsDigitalIn(IOPORT_B, BIT_0);
+    PORTSetPinsDigitalOut(IOPORT_B, BIT_1);
+
+#ifdef USE_LINX
+    CNCONBbits.ON = 1; // CN is enabled
+    CNCONBbits.SIDL = 0; // CPU Idle does not affect CN operation
+    CNENBbits.CNIEB0 = 1; // Enable RB0 change notice    
+
     // Read port B to clear mismatch condition
     dummyRead = PORTB;
- 
+
     // Clear CN interrupt flag
-    IFS1bits.CNBIF = 0;                     // Clear status register for port B
-    IPC8CLR = _IPC8_CNIP_MASK;              // Clear priority
-    IPC8SET = (2 << _IPC8_CNIP_POSITION);   // Set priority (2)
-    IEC1bits.CNBIE = 1;                     // Enable CN interrupts on port B    
-    CNPUBbits.CNPUB0 = 1;                   // Pullup enable  
-    
-    // Set up Timer 3 for PWM time base    
-    T3CON = 0x00;
-    T3CONbits.TCKPS2 = 0;   // 1:1 Prescaler
-    T3CONbits.TCKPS1 = 0;
-    T3CONbits.TCKPS0 = 0;
-    PR3 = 3000;             // Use 50 microsecond rollover for 20 khz
-    T3CONbits.TON = 1;      // Let her rip
-    
-    PPSOutput(1, RPC0, OC1);    
-    OC1CON = 0x00;
-    OC1CONbits.OC32 = 0;    // 16 bit PWM
-    OC1CONbits.ON = 1;      // Turn on PWM
-    OC1CONbits.OCTSEL = 1;  // Use Timer 3 as PWM time base
-    OC1CONbits.OCM2 = 1;    // PWM mode enabled, no fault pin
-    OC1CONbits.OCM1 = 1;
-    OC1CONbits.OCM0 = 0;
-    OC1RS = 1500;
-    
+    IFS1bits.CNBIF = 0; // Clear status register for port B
+    IPC8CLR = _IPC8_CNIP_MASK; // Clear priority
+    IPC8SET = (2 << _IPC8_CNIP_POSITION); // Set priority (2)
+    IEC1bits.CNBIE = 1; // Enable CN interrupts on port B    
+    CNPUBbits.CNPUB0 = 1; // Pullup enable  
+#endif    
+
     // Set up main UART    
     PPSOutput(4, RPC9, U2TX);
     PPSInput(2, U2RX, RPC8);
+
     UARTConfigure(HOSTuart, UART_ENABLE_HIGH_SPEED | UART_ENABLE_PINS_TX_RX_ONLY);
     UARTSetFifoMode(HOSTuart, UART_INTERRUPT_ON_RX_NOT_EMPTY); //  | UART_INTERRUPT_ON_TX_DONE  
     UARTSetLineControl(HOSTuart, UART_DATA_SIZE_8_BITS | UART_PARITY_NONE | UART_STOP_BITS_1);
@@ -420,7 +464,7 @@ unsigned long dummyRead;
     INTEnable(INT_SOURCE_UART_RX(HOSTuart), INT_ENABLED);
     INTSetVectorPriority(INT_VECTOR_UART(HOSTuart), INT_PRIORITY_LEVEL_2);
     // INTSetVectorSubPriority(INT_VECTOR_UART(HOSTuart), INT_SUB_PRIORITY_LEVEL_0);        
-    
+
     // Set up Timer 2, no interrupts 
     T2CON = 0x00;
     T2CONbits.TCKPS2 = 0; // 1:8 Prescaler
@@ -430,6 +474,30 @@ unsigned long dummyRead;
     PR2 = 0xFFFF;
     T2CONbits.TON = 1; // Let her rip   
     // ConfigIntTimer2(T2_INT_ON | T2_INT_PRIOR_5);
+
+#ifdef USE_PWM    
+    // Set up Timer 3 for PWM time base    
+    T3CON = 0x00;
+    T3CONbits.TCKPS2 = 0; // 1:1 Prescaler
+    T3CONbits.TCKPS1 = 0;
+    T3CONbits.TCKPS0 = 0;
+    PR3 = 1024; // Use 50 microsecond rollover for 20 khz
+    T3CONbits.TON = 1; // Let her rip
+
+    PPSOutput(1, RPC0, OC1);
+    OC1CON = 0x00;
+    OC1CONbits.OC32 = 0; // 16 bit PWM
+    OC1CONbits.ON = 1; // Turn on PWM
+    OC1CONbits.OCTSEL = 1; // Use Timer 3 as PWM time base
+    OC1CONbits.OCM2 = 1; // PWM mode enabled, no fault pin
+    OC1CONbits.OCM1 = 1;
+    OC1CONbits.OCM0 = 0;
+    OC1RS = 256;
+#endif
+    
+#ifdef USE_AD    
+    ConfigAd();
+#endif    
 
     // Turn on the interrupts
     INTEnableSystemMultiVectoredInt();
@@ -483,49 +551,6 @@ void __ISR(HOST_VECTOR, ipl2) IntHostUartHandler(void) {
     }
 }
 
-/*
-void ProcessIO(void) {
-    BYTE numBytesRead;
-
-    // Blink the LEDs according to the USB device status
-    BlinkUSBStatus();
-    
-    // User Application USB tasks
-    if ((USBDeviceState < CONFIGURED_STATE) || (USBSuspendControl == 1)) return;
-
-    if (buttonPressed) {
-        if (stringPrinted == FALSE) {
-            if (mUSBUSARTIsTxTrfReady()) {
-                putrsUSBUSART("Button Pressed -- \r\n");
-                stringPrinted = TRUE;
-            }
-        }
-    } else  stringPrinted = FALSE;
-
-    if (USBUSARTIsTxTrfReady()) {
-        numBytesRead = getsUSBUSART(USB_Out_Buffer, 64);
-        if (numBytesRead != 0) {
-            BYTE i;
-
-            for (i = 0; i < numBytesRead; i++) {
-                switch (USB_Out_Buffer[i]) {
-                    case 0x0A:
-                    case 0x0D:
-                        USB_In_Buffer[i] = USB_Out_Buffer[i];
-                        break;
-                    default:
-                        USB_In_Buffer[i] = USB_Out_Buffer[i] + 1;
-                        break;
-                }
-            }
-            putUSBUSART(USB_In_Buffer, numBytesRead);
-        }
-    }
-    CDCTxService();
-} //end ProcessIO
- */
-
-/*
 void BlinkUSBStatus(void) {
     static WORD led_count = 0;
 
@@ -543,9 +568,7 @@ void BlinkUSBStatus(void) {
             if (mGetLED_1()) mLED_2_On()
             else mLED_2_Off()
             }//end if
-    }
-
-    else {
+    } else {
         if (USBDeviceState == DETACHED_STATE)
             mLED_Both_Off()
         else if (USBDeviceState == ATTACHED_STATE)
@@ -570,7 +593,6 @@ void BlinkUSBStatus(void) {
     }//end if(UCONbits.SUSPND...)
 
 }//end BlinkUSBStatus
-*/
 
 void USBCBSuspend(void) {
     ;
@@ -696,6 +718,7 @@ BOOL USER_USB_CALLBACK_EVENT_HANDLER(int event, void *pdata, WORD size) {
  *
  * Note:            None
  *******************************************************************/
+#ifdef USE_USB
 
 void ProcessIO(void) {
     static unsigned char ch, USBTxIndex = 0;
@@ -703,17 +726,17 @@ void ProcessIO(void) {
     BYTE numBytesRead;
 
     // Blink the LEDs according to the USB device status
-    // BlinkUSBStatus(); $$$$
+    BlinkUSBStatus();
 
     // User Application USB tasks
     if ((USBDeviceState < CONFIGURED_STATE) || (USBSuspendControl == 1)) return;
 
     numBytesRead = getsUSBUSART(USBRxBuffer, 64);
-    
-    for (i = 0; i < numBytesRead; i++){
+
+    for (i = 0; i < numBytesRead; i++) {
         ch = USBRxBuffer[i];
-        if (USBTxIndex < MAXBUFFER-2) HOSTTxBuffer[USBTxIndex++] = ch;
-        if (ch == '\r'){
+        if (USBTxIndex < MAXBUFFER - 2) HOSTTxBuffer[USBTxIndex++] = ch;
+        if (ch == '\r') {
             HOSTTxBuffer[USBTxIndex] = '\0';
             printf("\rUSB RECEIVED: %s", HOSTTxBuffer);
             USBTxIndex = 0;
@@ -730,14 +753,17 @@ void ProcessIO(void) {
     }
     CDCTxService();
 } //end ProcessIO
+#endif
 
+#ifdef USE_AD    
+void ConfigAd(void) {
 
-void ConfigAd(void){
+    //mPORTBSetPinsAnalogIn(BIT_0);
+    //mPORTBSetPinsAnalogIn(BIT_1);
+    //mPORTBSetPinsAnalogIn(BIT_2);
+    //mPORTBSetPinsAnalogIn(BIT_3);
 
-    mPORTBSetPinsAnalogIn(BIT_0);
-    mPORTBSetPinsAnalogIn(BIT_1);
-    mPORTBSetPinsAnalogIn(BIT_2);
-    mPORTBSetPinsAnalogIn(BIT_3);
+    mPORTCSetPinsAnalogIn(BIT_1);
 
     // ---- configure and enable the ADC ----
 
@@ -754,13 +780,22 @@ void ConfigAd(void){
     //                   use ADC internal clock | set sample time
 #define PARAM3  ADC_CONV_CLK_INTERNAL_RC | ADC_SAMPLE_TIME_31
 
-    //  set inputs to analog
-#define PARAM4    ENABLE_AN0_ANA | ENABLE_AN1_ANA| ENABLE_AN2_ANA | ENABLE_AN3_ANA
+    //  set AM7 (A1 on Olimex 220 board) input to analog
+    // #define PARAM4    ENABLE_AN0_ANA | ENABLE_AN1_ANA| ENABLE_AN2_ANA | ENABLE_AN3_ANA
+#define PARAM4    ENABLE_AN7_ANA
 
     // Only scan AN0, AN1, AN2, AN3 for now
-#define PARAM5   SKIP_SCAN_AN4 |SKIP_SCAN_AN5 |SKIP_SCAN_AN6 |SKIP_SCAN_AN7 |\
-                    SKIP_SCAN_AN8 |SKIP_SCAN_AN9 |SKIP_SCAN_AN10 |\
-                      SKIP_SCAN_AN11 | SKIP_SCAN_AN12 |SKIP_SCAN_AN13 |SKIP_SCAN_AN14 |SKIP_SCAN_AN15
+    //#define PARAM5   SKIP_SCAN_AN4 |SKIP_SCAN_AN5 |SKIP_SCAN_AN6 |SKIP_SCAN_AN7 |\
+//                    SKIP_SCAN_AN8 |SKIP_SCAN_AN9 |SKIP_SCAN_AN10 |\
+//                      SKIP_SCAN_AN11 | SKIP_SCAN_AN12 |SKIP_SCAN_AN13 |SKIP_SCAN_AN14 |SKIP_SCAN_AN15
+    //
+
+    // USE AN7    
+#define PARAM5 SKIP_SCAN_AN0 |SKIP_SCAN_AN1 |SKIP_SCAN_AN2 |SKIP_SCAN_AN3 |\
+SKIP_SCAN_AN4 | SKIP_SCAN_AN5 | SKIP_SCAN_AN6 |\
+SKIP_SCAN_AN8 | SKIP_SCAN_AN9 | SKIP_SCAN_AN10 |\
+SKIP_SCAN_AN11 | SKIP_SCAN_AN12 | SKIP_SCAN_AN13 | SKIP_SCAN_AN14 | SKIP_SCAN_AN15
+    
 
     // set negative reference to Vref for Mux A
     SetChanADC10(ADC_CH0_NEG_SAMPLEA_NVREF);
@@ -775,10 +810,8 @@ void ConfigAd(void){
 
     // Enable the ADC
     EnableADC10();
-
 }
-
-
+#endif
 
 void __ISR(_ADC_VECTOR, ipl6) AdcHandler(void) {
     unsigned short offSet;
@@ -787,12 +820,12 @@ void __ISR(_ADC_VECTOR, ipl6) AdcHandler(void) {
     mAD1IntEnable(INT_DISABLED);
     mAD1ClearIntFlag();
 
+
     // Determine which buffer is idle and create an offset
     offSet = 8 * ((~ReadActiveBufferADC10() & 0x01));
 
     for (i = 0; i < MAXPOTS; i++)
-        arrPots[i] = (unsigned char) (ReadADC10(offSet + i) / 4); // read the result of channel 0 conversion from the idle buffer
-
+        arrPots[i] = (unsigned short) ReadADC10(offSet + i); // read the result of channel 0 conversion from the idle buffer
+    ADflag = TRUE;
 }
-
 
