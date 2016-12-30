@@ -1,4 +1,4 @@
- /***************************************************************************************
+/***************************************************************************************
  * FileName:  main.c Includes LINX communication with MAGIC WAND & ACCELEROMETER
  * 
  * 12-19-16: Added LINX communication with magic wand/accelerometer
@@ -11,13 +11,13 @@
  * Modified start time constants START_ONE etc.
  * PWM OC1 is on PORTC 0 which is A0 on the Olimex 220 board
  * Added Timer 4 to enable interrupt on change every 100 micro seconds
- * Github Test
+ * Added getCRC8() with parity check
  ****************************************************************************************/
 
-#define USE_USB
-#define USE_PWM
-#define USE_AD
-// #define USE_LINX
+//#define USE_USB
+//#define USE_PWM
+//#define USE_AD
+#define USE_LINX
 
 #include "USB/usb.h"
 #include "USB/usb_function_cdc.h"
@@ -75,26 +75,26 @@
 
 /** V A R I A B L E S ********************************************************/
 #define MAXDATABYTES 64
-unsigned char   arrData[MAXDATABYTES];
-unsigned char   HOSTRxBuffer[MAXBUFFER];
-unsigned char   HOSTRxBufferFull = FALSE;
+unsigned char arrData[MAXDATABYTES];
+unsigned char HOSTRxBuffer[MAXBUFFER];
+unsigned char HOSTRxBufferFull = FALSE;
 
-unsigned char   HOSTTxBuffer[MAXBUFFER];
-unsigned char   USBRxBuffer[MAXBUFFER];
-unsigned char   USBTxBuffer[MAXBUFFER];
+unsigned char HOSTTxBuffer[MAXBUFFER];
+unsigned char USBRxBuffer[MAXBUFFER];
+unsigned char USBTxBuffer[MAXBUFFER];
 
-unsigned short  HOSTRxLength = 0;
-unsigned short  HOSTTxLength = 0;
+unsigned short HOSTRxLength = 0;
+unsigned short HOSTTxLength = 0;
 
-unsigned short  previousExpected = 0, numExpectedBytes = 0;
-unsigned char   error = 0;
-unsigned char   RXstate = 0;
-unsigned char   timeoutFlag = FALSE;
-unsigned short  numBytesReceived = 0;
+unsigned short previousExpected = 0, numExpectedBytes = 0;
+unsigned char error = 0;
+unsigned char RXstate = 0;
+unsigned char timeoutFlag = FALSE;
+unsigned short numBytesReceived = 0;
 
 /** P R I V A T E  P R O T O T Y P E S ***************************************/
 // extern unsigned short CRCcalculate(unsigned char *message, unsigned char nBytes);
-extern unsigned char getCRC7(unsigned char *ptrMessage, short numBytes);
+extern unsigned char getCRC8(unsigned char *ptrMessage, short numBytes);
 static void InitializeSystem(void);
 void ProcessIO(void);
 void USBDeviceTasks(void);
@@ -113,10 +113,18 @@ int main(void) {
     unsigned short trialCounter = 0;
     unsigned char CRCcheck, CRCdata;
     signed char rawVectx, rawVecty, rawVectz;
-    unsigned short loopCounter = 0;
-    
+    unsigned char i;
+    unsigned short loopCounter = 0;     
+    //unsigned short CRCcomplete;
+    //unsigned char errorFlag = FALSE;
+
+    //union {
+    //    unsigned char byte[2];
+    //    unsigned short integer;
+    //} convert;
+
     InitializeSystem();
-    DelayMs(200);    
+    DelayMs(200);
     printf("\rTESTING: ");
 
 #ifdef USE_USB
@@ -124,47 +132,59 @@ int main(void) {
 #endif    
 
 #ifdef USE_LINX
-    printf("LINX COMMUNICATION, ");    
+    printf("LINX COMMUNICATION, ");
 #endif
 
 #ifdef USE_AD
     printf(" AD CONVERSION, ");
 #endif    
-    
+
 #ifdef USE_PWM
     printf("PWM");
 #endif
-    
+
     while (1) {
 #ifdef USE_LINX     
-        if (numBytesReceived) {
-
-            CRCcheck = getCRC7(arrData, numBytesReceived - 1);
+        if (numBytesReceived){
+            //errorFlag = FALSE;
+            
+            CRCcheck = getCRC8(arrData, numBytesReceived - 1);
             CRCdata = arrData[numBytesReceived - 1];
+            if (CRCcheck != CRCdata) {
+                printf("\rCRC ERROR");
+                //errorFlag = TRUE;
+            }
+
+            //CRCcomplete = CRCcalculate (arrData, 4);
+            //convert.byte[0] = arrData[numBytesReceived-2];
+            //convert.byte[1] = arrData[numBytesReceived-1];
             
-            if (CRCcheck != CRCdata) printf("\rCRC ERROR:");
-            
+            //if (convert.integer != CRCcomplete){
+            //    if (!errorFlag) printf("\r\rCRC 7 ERROR!!!!!!!!!!!!!");
+                // printf("\rCRCconvert: %X, CRCccmplete: %X", convert.integer, CRCcomplete);
+            //}
+
             rawVectx = (signed char) arrData[1];
             rawVecty = (signed char) arrData[2];
-            rawVectz = (signed char) arrData[3];            
-
-            printf("\r%d: X: %d, Y: %d, Z: %d", ++trialCounter, (int) rawVectx, (int) rawVecty, (int) rawVectz);
+            rawVectz = (signed char) arrData[3];
             
+            printf("\r%d: X: %d, Y: %d, Z: %d", ++trialCounter, (int) rawVectx, (int) rawVecty, (int) rawVectz);            
+
             numBytesReceived = 0;
         } // End if (numBytesReceived)
-       
-            
+
+
         if (error) {
             printf("\rError: %X", error);
             error = 0;
         }
 #endif
-        
+
 #ifdef USE_AD
         DelayMs(1);
         if (loopCounter) loopCounter--;
         if (!loopCounter) {
-            loopCounter = 100;            
+            loopCounter = 100;
             // printf("\rPWM value: %d", (int) arrPots[0]);
             OC1RS = arrPots[0];
             if (ADflag) {
@@ -172,11 +192,11 @@ int main(void) {
                 // printf(" AD INT");
                 mAD1IntEnable(INT_ENABLED);
             }
-        }        
+        }
 #endif        
 
 #ifdef USE_USB        
-        
+
 #if defined(USB_INTERRUPT)
         if (USB_BUS_SENSE && (USBGetDeviceState() == DETACHED_STATE))
             USBDeviceAttach();
@@ -228,40 +248,41 @@ static void InitializeSystem(void) {
 }//end InitializeSystem
 
 #ifdef USE_LINX
+
 void __ISR(_CHANGE_NOTICE_VECTOR, ipl2) ChangeNotice_Handler(void) {
-    unsigned short   Timer2Counter = 0;
-    static unsigned short   byteMask = 0x0001;
-    static unsigned short   dataInt = 0x00;
-    static unsigned char    oddFlag = FALSE;
-    static unsigned short   dataIndex = 0;
-    unsigned short          PORTin, RX_PIN;
+    unsigned short Timer2Counter = 0;
+    static unsigned short byteMask = 0x0001;
+    static unsigned short dataInt = 0x00;
+    static unsigned char oddFlag = FALSE;
+    static unsigned short dataIndex = 0;
+    unsigned short PORTin, RX_PIN;
 
     // Step #1 - always clear the mismatch condition first
     PORTin = PORTBbits.RB0;
 
     // Step #2 - then clear the interrupt flag for PORTB
-    IFS1bits.CNBIF = 0;    
-    
+    IFS1bits.CNBIF = 0;
+
     if (TEST_OUT) TEST_OUT = 0;
     else TEST_OUT = 1;
 
-    Timer2Counter = TMR2 / 75;  // Timer2Counter is the elapsed time since last interrupt
-                                // in increments of 10 microseconds. 1/10 micro = 100 kHz
-                                // 60 Mhz system clock / 8 prescale / 75 = 100 khz
-    TMR2 = 0x0000;              // Reset both timers.
+    Timer2Counter = TMR2 / 75; // Timer2Counter is the elapsed time since last interrupt
+    // in increments of 10 microseconds. 1/10 micro = 100 kHz
+    // 60 Mhz system clock / 8 prescale / 75 = 100 khz
+    TMR2 = 0x0000; // Reset both timers.
     TMR4 = 0x0000;
-    mT4ClearIntFlag();          // Clear the Timer 4 interrupt flag to ensure
-                                // it won't re-enable interrupt on change for another 100 microseconds
-    if (!PORTin) RX_PIN = 0;    
+    mT4ClearIntFlag(); // Clear the Timer 4 interrupt flag to ensure
+    // it won't re-enable interrupt on change for another 100 microseconds
+    if (!PORTin) RX_PIN = 0;
     else RX_PIN = 1;
 
-    if (RXstate < 5) IEC1bits.CNBIE = 0;    // If the RXstate hasn't yet incremented to 5,
-                                            // then a START transmission sequence hasn't completed,
-                                            // and we assume the LINX isn't receiving valid data.
-                                            // Input on change interrupts are temporarily disabled here 
-                                            // until Timer 4 re-enables them in 100 microseconds.
-                                            // Otherwise random input noise could swamp the CPU
-                                            // with interrupts. 
+    if (RXstate < 5) IEC1bits.CNBIE = 0; // If the RXstate hasn't yet incremented to 5,
+    // then a START transmission sequence hasn't completed,
+    // and we assume the LINX isn't receiving valid data.
+    // Input on change interrupts are temporarily disabled here 
+    // until Timer 4 re-enables them in 100 microseconds.
+    // Otherwise random input noise could swamp the CPU
+    // with interrupts. 
     if (RXstate && (Timer2Counter > TIMEOUT)) {
         if (RXstate == 6) {
             timeoutFlag = TRUE;
@@ -278,30 +299,30 @@ void __ISR(_CHANGE_NOTICE_VECTOR, ipl2) ChangeNotice_Handler(void) {
     if (RX_PIN && RXstate == 2) {
         if (Timer2Counter > START_TWO) RXstate++;
         else RXstate = 0;
-    // RX_IN goes LOW: fourth START                 
+        // RX_IN goes LOW: fourth START                 
     } else if (RXstate == 3) {
         if (Timer2Counter > START_THREE) RXstate++;
         else RXstate = 0;
-    // RX_IN goes HIGH: dummy bit even pulse
+        // RX_IN goes HIGH: dummy bit even pulse
     } else if (RXstate == 4) {
         if (Timer2Counter > START_FOUR) RXstate++;
         else RXstate = 0;
-    // RX_IN goes LOW: dummy bit odd pulse                  
-    } else if (RXstate == 5) {        
+        // RX_IN goes LOW: dummy bit odd pulse                  
+    } else if (RXstate == 5) {
         byteMask = 0x01;
         oddFlag = FALSE;
         dataInt = 0x00;
         error = 0;
         dataIndex = 0;        
         RXstate++;
-    // RX STATE = 6:
-    // DATA BITS get processed here. 
-    // Clock state toggles between EVEN and ODD with each transition.
-    // Data bit is always read on ODD half of clock cycle, 
-    // indicated when oddFlag = TRUE.
-    // All LONG pulses begin and end when clock is ODD,
-    // so data bit is always read when long pulse is detected.
-    } else if (RXstate == 6) {
+        // RX STATE = 6:
+        // DATA BITS get processed here. 
+        // Clock state toggles between EVEN and ODD with each transition.
+        // Data bit is always read on ODD half of clock cycle, 
+        // indicated when oddFlag = TRUE.
+        // All LONG pulses begin and end when clock is ODD,
+        // so data bit is always read when long pulse is detected.
+    } else if (RXstate == 6) {        
         // If this a long pulse, data bit always gets read,
         // since all long pulses end on odd clock cycle:
         if (Timer2Counter > MAXBITLENGTH) {
@@ -309,22 +330,22 @@ void __ISR(_CHANGE_NOTICE_VECTOR, ipl2) ChangeNotice_Handler(void) {
             if (byteMask == 0x80) {
                 byteMask = 0x01;
                 if (dataIndex == 0) {
-                    numExpectedBytes = dataInt + 2;
+                    numExpectedBytes = dataInt;
                 }
                 if (dataIndex < MAXDATABYTES) arrData[dataIndex++] = (unsigned char) dataInt;
                 dataInt = 0x00;
             } else byteMask = byteMask << 1;
             oddFlag = FALSE;
 
-        // Otherwise, this must be a short pulse,
-        // in which case 
+            // Otherwise, this must be a short pulse,
+            // in which case 
         } else if (oddFlag) {
             oddFlag = FALSE;
             if (RX_PIN) dataInt = dataInt | byteMask;
             if (byteMask == 0x80) {
                 byteMask = 0x01;
                 if (dataIndex == 0) {
-                    numExpectedBytes = dataInt + 2;
+                    numExpectedBytes = dataInt;
                 }
                 if (dataIndex < MAXDATABYTES) arrData[dataIndex++] = (unsigned char) dataInt;
                 dataInt = 0x00;
@@ -332,9 +353,9 @@ void __ISR(_CHANGE_NOTICE_VECTOR, ipl2) ChangeNotice_Handler(void) {
         } else oddFlag = TRUE;
 
         if (dataIndex >= numExpectedBytes && numExpectedBytes != 0) {
-            numBytesReceived = dataIndex;            
+            numBytesReceived = dataIndex;
             dataIndex = 0;
-            RXstate = 0;            
+            RXstate = 0;
         }
     } // End else        
 }
@@ -343,8 +364,9 @@ void __ISR(_CHANGE_NOTICE_VECTOR, ipl2) ChangeNotice_Handler(void) {
 // This interrupt occurs at 10 khz, or once every 100 microseconds
 // The purpose is to re enable interrupt on change 
 // for LINX input on PORT B
+
 void __ISR(_TIMER_4_VECTOR, ipl5) Timer4Handler(void) {
-    mT4ClearIntFlag();  // Clear the interrupt flag    
+    mT4ClearIntFlag(); // Clear the interrupt flag    
     IEC1bits.CNBIE = 1; // Enable CN interrupts
 }
 
@@ -384,19 +406,19 @@ void UserInit(void) {
 
 #ifdef USE_LINX
     // Set up interrupt on change for the PORT B LINX receiver input pin RB0
-    CNCONBbits.ON = 1;      // CN is enabled
-    CNCONBbits.SIDL = 0;    // CPU Idle does not affect CN operation
-    CNENBbits.CNIEB0 = 1;   // Enable RB0 change notice    
+    CNCONBbits.ON = 1; // CN is enabled
+    CNCONBbits.SIDL = 0; // CPU Idle does not affect CN operation
+    CNENBbits.CNIEB0 = 1; // Enable RB0 change notice    
 
     // Read port B to clear mismatch condition
     dummyRead = PORTB;
 
     // Clear CN interrupt flag
-    IFS1bits.CNBIF = 0;                     // Clear status register for port B
-    IPC8CLR = _IPC8_CNIP_MASK;              // Clear priority
-    IPC8SET = (2 << _IPC8_CNIP_POSITION);   // Set priority (2)
-    IEC1bits.CNBIE = 1;                     // Enable CN interrupts on port B    
-    CNPUBbits.CNPUB0 = 1;                   // Pullup enable  
+    IFS1bits.CNBIF = 0; // Clear status register for port B
+    IPC8CLR = _IPC8_CNIP_MASK; // Clear priority
+    IPC8SET = (2 << _IPC8_CNIP_POSITION); // Set priority (2)
+    IEC1bits.CNBIE = 1; // Enable CN interrupts on port B    
+    CNPUBbits.CNPUB0 = 1; // Pullup enable  
 #endif    
 
     // Set up main UART    
@@ -414,7 +436,7 @@ void UserInit(void) {
     INTEnable(INT_SOURCE_UART_RX(HOSTuart), INT_ENABLED);
     INTSetVectorPriority(INT_VECTOR_UART(HOSTuart), INT_PRIORITY_LEVEL_2);
     // INTSetVectorSubPriority(INT_VECTOR_UART(HOSTuart), INT_SUB_PRIORITY_LEVEL_0);  
-    
+
     // Set up Timer 2 with no interrupts.
     // This timer is used to measure the intervals
     // between interrupts on change on the LINX receiver PORT B input pin.
@@ -423,45 +445,45 @@ void UserInit(void) {
     // So the 60 mhz system clock / 8 prescaler / 75 = 100 khz,
     // which is the maximum resolution for the LINX input.
     T2CON = 0x00;
-    T2CONbits.TCKPS2 = 0;   // 1:8 Prescaler
+    T2CONbits.TCKPS2 = 0; // 1:8 Prescaler
     T2CONbits.TCKPS1 = 1;
     T2CONbits.TCKPS0 = 1;
-    T2CONbits.T32 = 0;      // TMRx and TMRy form separate 16-bit timers
-    PR2 = 0xFFFF;    
-    T2CONbits.TON = 1;      // Let her rip   
-        
+    T2CONbits.T32 = 0; // TMRx and TMRy form separate 16-bit timers
+    PR2 = 0xFFFF;
+    T2CONbits.TON = 1; // Let her rip   
+
     // Set up Timer 4, to interrupt every 100 microseconds, 10 khz
     T4CON = 0x00;
-    T4CONbits.TCKPS2 = 0;   // 1:8 Prescaler
+    T4CONbits.TCKPS2 = 0; // 1:8 Prescaler
     T4CONbits.TCKPS1 = 1;
     T4CONbits.TCKPS0 = 1;
-    T4CONbits.T32 = 0;      // TMRx and TMRy form separate 16-bit timers
-    PR4 = 750; 
-    T4CONbits.TON = 1;      // Let her rip   
+    T4CONbits.T32 = 0; // TMRx and TMRy form separate 16-bit timers
+    PR4 = 750;
+    T4CONbits.TON = 1; // Let her rip   
     ConfigIntTimer4(T4_INT_ON | T4_INT_PRIOR_5);
-    
+
 
 #ifdef USE_PWM    
     // Set up Timer 3 for PWM time base    
     T3CON = 0x00;
-    T3CONbits.TCKPS2 = 0;   // 1:1 Prescaler
+    T3CONbits.TCKPS2 = 0; // 1:1 Prescaler
     T3CONbits.TCKPS1 = 0;
     T3CONbits.TCKPS0 = 0;
-    PR3 = 1024;             // Use 50 microsecond rollover for 20 khz
-    T3CONbits.TON = 1;      // Let her rip
+    PR3 = 1024; // Use 50 microsecond rollover for 20 khz
+    T3CONbits.TON = 1; // Let her rip
 
     // Set up PWM OC1 on PORTC 0 which is A0 on the Olimex 220 board:
     PPSOutput(1, RPC0, OC1);
     OC1CON = 0x00;
-    OC1CONbits.OC32 = 0;    // 16 bit PWM
-    OC1CONbits.ON = 1;      // Turn on PWM
-    OC1CONbits.OCTSEL = 1;  // Use Timer 3 as PWM time base
-    OC1CONbits.OCM2 = 1;    // PWM mode enabled, no fault pin
+    OC1CONbits.OC32 = 0; // 16 bit PWM
+    OC1CONbits.ON = 1; // Turn on PWM
+    OC1CONbits.OCTSEL = 1; // Use Timer 3 as PWM time base
+    OC1CONbits.OCM2 = 1; // PWM mode enabled, no fault pin
     OC1CONbits.OCM1 = 1;
     OC1CONbits.OCM0 = 0;
     OC1RS = 256;
 #endif
-    
+
 #ifdef USE_AD    
     ConfigAd();
 #endif    
@@ -615,7 +637,7 @@ void USBCBSendResume(void) {
         }
     }
 }
-*/
+ */
 
 #if defined(ENABLE_EP0_DATA_RECEIVED_CALLBACK)
 
@@ -712,6 +734,7 @@ void ProcessIO(void) {
 #endif
 
 #ifdef USE_AD    
+
 void ConfigAd(void) {
 
     mPORTCSetPinsAnalogIn(BIT_1);
@@ -736,12 +759,12 @@ void ConfigAd(void) {
 #define PARAM4    ENABLE_AN7_ANA
 
 
-// USE AN7    
+    // USE AN7    
 #define PARAM5 SKIP_SCAN_AN0 |SKIP_SCAN_AN1 |SKIP_SCAN_AN2 |SKIP_SCAN_AN3 |\
 SKIP_SCAN_AN4 | SKIP_SCAN_AN5 | SKIP_SCAN_AN6 |\
 SKIP_SCAN_AN8 | SKIP_SCAN_AN9 | SKIP_SCAN_AN10 |\
 SKIP_SCAN_AN11 | SKIP_SCAN_AN12 | SKIP_SCAN_AN13 | SKIP_SCAN_AN14 | SKIP_SCAN_AN15
-    
+
 
     // set negative reference to Vref for Mux A
     SetChanADC10(ADC_CH0_NEG_SAMPLEA_NVREF);
