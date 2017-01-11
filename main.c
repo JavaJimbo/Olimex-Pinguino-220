@@ -1,5 +1,6 @@
 /***************************************************************************************
- * FileName:  main.c Includes LINX communication with MAGIC WAND & ACCELEROMETER
+ * Project:     Olimex Pinguino 220 
+ * FileName:    main.c 
  * 
  * 12-19-16: Added LINX communication with magic wand/accelerometer
  * Interference from USB causes lots of errors.
@@ -12,16 +13,38 @@
  * PWM OC1 is on PORTC 0 which is A0 on the Olimex 220 board
  * Added Timer 4 to enable interrupt on change every 100 micro seconds
  * Added getCRC8() with parity check
+ * 
+ * 1-02-17: Got I2C #1 and #2 working with 24LC256 EEprom
+ * 1-10-17: Created PCA9685.c file for PWM routines to drive Adafruit V2 Motor Shield
+ *          Tweaked DelayPIC32.c for Olimex 220 and XC32 Compiler V1.30
  ****************************************************************************************/
+// #define USE_USB
+// #define USE_PWM
+// #define USE_AD
 
-//#define USE_USB
-//#define USE_PWM
-//#define USE_AD
+// #define I2C_CLOCK_FREQ              100000
+// #define EEPROM_I2C_BUS              I2C1
+// #define EEPROM_ADDRESS              0x50        // 0b1010000 Serial EEPROM address
+
+#define SYS_FREQ 60000000
+#define GetPeripheralClock() SYS_FREQ 
 #define USE_LINX
+
+#define EA PORTAbits.RA10 
+#define EB PORTAbits.RA1
+#define PWM1 OC1RS
+#define PWM2 OC2RS
+#define PWM3 OC5RS
+#define PWM4 OC4RS
 
 #include "USB/usb.h"
 #include "USB/usb_function_cdc.h"
 #include "HardwareProfile.h"
+#include "I2C_EEPROM_PIC32.h"
+#include "PCA9685.h"
+#include "Delay.h"
+
+#include <plib.h>
 
 /** CONFIGURATION **************************************************/
 #pragma config UPLLEN   = ON            // USB PLL Enabled
@@ -42,6 +65,7 @@
 #pragma config BWP      = OFF           // Boot Flash Write Protect
 #pragma config PWP      = OFF           // Program Flash Write Protect
 #pragma config ICESEL   = ICS_PGx2      // ICE/ICD Comm Channel Select
+#pragma config JTAGEN   = OFF
 
 /*** DEFINES *****************************************************************/
 #define HOSTuart UART2
@@ -50,7 +74,8 @@
 #define HOST_VECTOR _UART_2_VECTOR     
 #define MAXBUFFER 64
 
-#define TEST_OUT LATBbits.LATB1
+// #define TEST_OUT LATBbits.LATB1
+#define TEST_OUT LATCbits.LATC0
 #define PUSHBUTTON_DOWN !PORTBbits.RB7 
 
 #define false FALSE
@@ -105,10 +130,18 @@ void BlinkUSBStatus(void);
 void UserInit(void);
 void ConfigAd(void);
 
+unsigned char PCAReadByte (unsigned char device, unsigned char PCAcontrolRegister, unsigned char *ptrData);
+unsigned char PCAWriteByte (unsigned char device, unsigned char PCAcontrolRegister, unsigned char data);
+
+unsigned char setPCA9685outputs (unsigned char device, unsigned short channel, unsigned short turnON, unsigned short turnOFF);
+unsigned char initializePCA9685(unsigned char device);
+unsigned char setPWM (unsigned char device, unsigned char motor, short PWMdata);
+
 #define MAXPOTS 1
 unsigned short arrPots[MAXPOTS];
 unsigned char ADflag = FALSE;
 
+/*
 int main(void) {
     unsigned short trialCounter = 0;
     unsigned char CRCcheck, CRCdata;
@@ -210,6 +243,7 @@ int main(void) {
 
     }//end while
 }
+ */
 
 /********************************************************************
  * Function:        static void InitializeSystem(void)
@@ -313,7 +347,7 @@ void __ISR(_CHANGE_NOTICE_VECTOR, ipl2) ChangeNotice_Handler(void) {
         oddFlag = FALSE;
         dataInt = 0x00;
         error = 0;
-        dataIndex = 0;        
+        dataIndex = 0;
         RXstate++;
         // RX STATE = 6:
         // DATA BITS get processed here. 
@@ -322,7 +356,7 @@ void __ISR(_CHANGE_NOTICE_VECTOR, ipl2) ChangeNotice_Handler(void) {
         // indicated when oddFlag = TRUE.
         // All LONG pulses begin and end when clock is ODD,
         // so data bit is always read when long pulse is detected.
-    } else if (RXstate == 6) {        
+    } else if (RXstate == 6) {
         // If this a long pulse, data bit always gets read,
         // since all long pulses end on odd clock cycle:
         if (Timer2Counter > MAXBITLENGTH) {
@@ -395,32 +429,34 @@ void UserInit(void) {
     unsigned long dummyRead;
 
     mJTAGPortEnable(false);
+    PORTSetPinsDigitalOut(IOPORT_C, BIT_0);
 
-    // Initialize all of the LED pins
-    mInitAllLEDs();
-    PORTSetPinsDigitalOut(IOPORT_A, BIT_10);
-    PORTClearBits(IOPORT_A, BIT_10);
+    /*    
+        // Initialize all of the LED pins
+        mInitAllLEDs();
+        PORTSetPinsDigitalOut(IOPORT_A, BIT_10);
+        PORTClearBits(IOPORT_A, BIT_10);
 
-    PORTSetPinsDigitalIn(IOPORT_B, BIT_0);
-    PORTSetPinsDigitalOut(IOPORT_B, BIT_1);
+        PORTSetPinsDigitalIn(IOPORT_B, BIT_0);
+        PORTSetPinsDigitalOut(IOPORT_B, BIT_1);
 
-#ifdef USE_LINX
-    // Set up interrupt on change for the PORT B LINX receiver input pin RB0
-    CNCONBbits.ON = 1; // CN is enabled
-    CNCONBbits.SIDL = 0; // CPU Idle does not affect CN operation
-    CNENBbits.CNIEB0 = 1; // Enable RB0 change notice    
+    #ifdef USE_LINX
+        // Set up interrupt on change for the PORT B LINX receiver input pin RB0
+        CNCONBbits.ON = 1; // CN is enabled
+        CNCONBbits.SIDL = 0; // CPU Idle does not affect CN operation
+        CNENBbits.CNIEB0 = 1; // Enable RB0 change notice    
 
-    // Read port B to clear mismatch condition
-    dummyRead = PORTB;
+        // Read port B to clear mismatch condition
+        dummyRead = PORTB;
 
-    // Clear CN interrupt flag
-    IFS1bits.CNBIF = 0; // Clear status register for port B
-    IPC8CLR = _IPC8_CNIP_MASK; // Clear priority
-    IPC8SET = (2 << _IPC8_CNIP_POSITION); // Set priority (2)
-    IEC1bits.CNBIE = 1; // Enable CN interrupts on port B    
-    CNPUBbits.CNPUB0 = 1; // Pullup enable  
-#endif    
-
+        // Clear CN interrupt flag
+        IFS1bits.CNBIF = 0; // Clear status register for port B
+        IPC8CLR = _IPC8_CNIP_MASK; // Clear priority
+        IPC8SET = (2 << _IPC8_CNIP_POSITION); // Set priority (2)
+        IEC1bits.CNBIE = 1; // Enable CN interrupts on port B    
+        CNPUBbits.CNPUB0 = 1; // Pullup enable  
+    #endif    
+     */
     // Set up main UART    
     PPSOutput(4, RPC9, U2TX);
     PPSInput(2, U2RX, RPC8);
@@ -433,7 +469,7 @@ void UserInit(void) {
 
     // Configure UART #2 Interrupts
     INTEnable(INT_U2TX, INT_DISABLED);
-    INTEnable(INT_SOURCE_UART_RX(HOSTuart), INT_ENABLED);
+    INTEnable(INT_SOURCE_UART_RX(HOSTuart), INT_DISABLED);
     INTSetVectorPriority(INT_VECTOR_UART(HOSTuart), INT_PRIORITY_LEVEL_2);
     // INTSetVectorSubPriority(INT_VECTOR_UART(HOSTuart), INT_SUB_PRIORITY_LEVEL_0);  
 
@@ -472,8 +508,8 @@ void UserInit(void) {
     PR3 = 1024; // Use 50 microsecond rollover for 20 khz
     T3CONbits.TON = 1; // Let her rip
 
-    // Set up PWM OC1 on PORTC 0 which is A0 on the Olimex 220 board:
-    PPSOutput(1, RPC0, OC1);
+    // Set up PWM OC1 on D8 on the Olimex 220 board:
+    PPSOutput(1, RPB7, OC1);
     OC1CON = 0x00;
     OC1CONbits.OC32 = 0; // 16 bit PWM
     OC1CONbits.ON = 1; // Turn on PWM
@@ -481,7 +517,45 @@ void UserInit(void) {
     OC1CONbits.OCM2 = 1; // PWM mode enabled, no fault pin
     OC1CONbits.OCM1 = 1;
     OC1CONbits.OCM0 = 0;
-    OC1RS = 256;
+    OC1RS = 0;
+
+    // Set up PWM OC2 on D11 on the Olimex 220 board:
+    PPSOutput(2, RPB5, OC2);
+    OC2CON = 0x00;
+    OC2CONbits.OC32 = 0; // 16 bit PWM
+    OC2CONbits.ON = 1; // Turn on PWM
+    OC2CONbits.OCTSEL = 1; // Use Timer 3 as PWM time base
+    OC2CONbits.OCM2 = 1; // PWM mode enabled, no fault pin
+    OC2CONbits.OCM1 = 1;
+    OC2CONbits.OCM0 = 0;
+    OC2RS = 0;
+
+    // Set up PWM OC5 on D12 on the Olimex 220 board:
+    PPSOutput(3, RPB13, OC5);
+    OC5CON = 0x00;
+    OC5CONbits.OC32 = 0; // 16 bit PWM
+    OC5CONbits.ON = 1; // Turn on PWM
+    OC5CONbits.OCTSEL = 1; // Use Timer 3 as PWM time base
+    OC5CONbits.OCM2 = 1; // PWM mode enabled, no fault pin
+    OC5CONbits.OCM1 = 1;
+    OC5CONbits.OCM0 = 0;
+    OC5RS = 0;
+
+    // Set up PWM OC4 on D6 on the Olimex 220 board:
+    PPSOutput(3, RPC6, OC4);
+    OC4CON = 0x00;
+    OC4CONbits.OC32 = 0; // 16 bit PWM
+    OC4CONbits.ON = 1; // Turn on PWM
+    OC4CONbits.OCTSEL = 1; // Use Timer 3 as PWM time base
+    OC4CONbits.OCM2 = 1; // PWM mode enabled, no fault pin
+    OC4CONbits.OCM1 = 1;
+    OC4CONbits.OCM0 = 0;
+    OC4RS = 0;
+
+    PORTSetPinsDigitalOut(IOPORT_A, BIT_1 | BIT_10);
+    PORTClearBits(IOPORT_A, BIT_1 | BIT_10);
+    ANSELAbits.ANSA1 = 0;
+
 #endif
 
 #ifdef USE_AD    
@@ -797,4 +871,142 @@ void __ISR(_ADC_VECTOR, ipl6) ADHandler(void) {
         arrPots[i] = (unsigned short) ReadADC10(offSet + i); // read the result of channel 0 conversion from the idle buffer
     ADflag = TRUE;
 }
+
+int main(void) {
+    unsigned char writeString[] = "Testing data blocks";
+    int size = sizeof (writeString);
+    unsigned char readString[size + 1], writeByte, readByte;
+    unsigned short memoryAddress;
+    unsigned short Duty1 = 0, Duty2 = 0, Duty3 = 0, Duty4 = 0, i;
+    #define MAXREGISTER 64
+    unsigned char PCAregister[MAXREGISTER], testData[MAXREGISTER];
+
+    // Initialize debug messages (when supported)    
+    UserInit();
+    
+    DelayMs(200);
+    printf("\r\rTesting PCA9685 Routines in PCA9685.c: Opening I2C #2");
+    // OpenI2C(I2C_EN, 299);
+
+    /*
+    printf("\rWriting %d bytes to EEPROM address %X", size, memoryAddress);
+    printf("\rWRITE BLOCK");
+    if (!EepromWriteBlock(EEPROM_ADDRESS, memoryAddress, writeString, size)) printf("\rWrite error");
+
+    printf("\rREAD BLOCK:");
+    if (!EepromReadBlock(EEPROM_ADDRESS, memoryAddress, readString, size)) printf("\rRead error");
+    else {
+        printf("\rSUCCESS: ");
+        short length;
+        length = strlen(readString);
+        readString[length] = '\0';
+        printf("\rBlock: %s", readString);
+    }
+    CloseI2C();
+    printf("\rDONE");
+    while (1);
+     */
+
+    //printf("\rWRITE BYTE:");
+    //writeByte = 76;
+    //if (!EepromWriteByte(EEPROM_ADDRESS, 0x1234, writeByte)) printf("\rWrite error");
+
+    //printf("\rREAD BYTE:");
+    //if (!EepromReadByte(EEPROM_ADDRESS, 0x1234, &readByte)) printf("\rRead error");
+    //else printf("\rSUCCESS byte = %d", readByte);
+    
+    
+    #define PCA9685_ADDRESS 0b11000000   
+    printf("\rInitializing: PCA9685: ");
+    
+    if (!initializePCA9685(PCA9685_ADDRESS)) printf("\rWrite error #1");
+    else printf("\rSetting PWM:");      
+    
+#define DELAYLOOPS 3
+    while(1){
+        setPWM (PCA9685_ADDRESS, M1, 2048);
+        setPWM (PCA9685_ADDRESS, M2, 0);
+        setPWM (PCA9685_ADDRESS, M3, 0);
+        setPWM (PCA9685_ADDRESS, M4, 0);
+        for (i = 0; i < DELAYLOOPS; i++) DelayMs(100);
+        setPWM (PCA9685_ADDRESS, M1, 0);
+        setPWM (PCA9685_ADDRESS, M2, 2048);
+        setPWM (PCA9685_ADDRESS, M3, 0);
+        setPWM (PCA9685_ADDRESS, M4, 0);
+        for (i = 0; i < DELAYLOOPS; i++) DelayMs(100);
+        setPWM (PCA9685_ADDRESS, M1, 0);
+        setPWM (PCA9685_ADDRESS, M2, 0);
+        setPWM (PCA9685_ADDRESS, M3, 2048);
+        setPWM (PCA9685_ADDRESS, M4, 0);
+        for (i = 0; i < DELAYLOOPS; i++) DelayMs(100);
+        setPWM (PCA9685_ADDRESS, M1, 0);
+        setPWM (PCA9685_ADDRESS, M2, 0);
+        setPWM (PCA9685_ADDRESS, M3, 0);
+        setPWM (PCA9685_ADDRESS, M4, 2048);
+        for (i = 0; i < DELAYLOOPS; i++) DelayMs(100);
+        
+        setPWM (PCA9685_ADDRESS, M1, -2048);
+        setPWM (PCA9685_ADDRESS, M2, 0);
+        setPWM (PCA9685_ADDRESS, M3, 0);
+        setPWM (PCA9685_ADDRESS, M4, 0);
+        for (i = 0; i < DELAYLOOPS; i++) DelayMs(100);
+        setPWM (PCA9685_ADDRESS, M1, 0);
+        setPWM (PCA9685_ADDRESS, M2, -2048);
+        setPWM (PCA9685_ADDRESS, M3, 0);
+        setPWM (PCA9685_ADDRESS, M4, 0);
+        for (i = 0; i < DELAYLOOPS; i++) DelayMs(100);
+        setPWM (PCA9685_ADDRESS, M1, 0);
+        setPWM (PCA9685_ADDRESS, M2, 0);
+        setPWM (PCA9685_ADDRESS, M3, -2048);
+        setPWM (PCA9685_ADDRESS, M4, 0);
+        for (i = 0; i < DELAYLOOPS; i++) DelayMs(100);
+        setPWM (PCA9685_ADDRESS, M1, 0);
+        setPWM (PCA9685_ADDRESS, M2, 0);
+        setPWM (PCA9685_ADDRESS, M3, 0);
+        setPWM (PCA9685_ADDRESS, M4, -2048);
+        for (i = 0; i < DELAYLOOPS; i++) DelayMs(100);        
+    }
+}
+
+
+
+
+/*
+//#define BRG_VAL 299        
+//OpenI2C(I2C_EN, BRG_VAL);  
+//EA = 0;
+//EB = 0;
+PORTSetBits(IOPORT_A, BIT_10);
+PORTSetBits(IOPORT_A, BIT_1);
+    
+while(1){        
+    PWM2 = PWM4 = 0;
+    for(i = 0; i < 1024; i++){
+        PWM1 = PWM3 = i;
+        DelayMs(10);
+    }
+    DelayMs(100);
+        
+    PWM2 = PWM4 = 0;
+    for(i = 1023; i > 0; i--){
+        PWM1 = PWM3 = i;
+        DelayMs(10);
+    }
+    DelayMs(100);
+        
+    PWM1 = PWM3 = 0;
+    for(i = 0; i < 1024; i++){
+        PWM2 = PWM4 = i;
+        DelayMs(10);
+    }
+    DelayMs(100);
+        
+    PWM1 = PWM3 = 0;
+    for(i = 1023; i > 0; i--){
+        PWM2 = PWM4 = i;
+        DelayMs(10);
+    }
+    DelayMs(100);
+ */
+
 
